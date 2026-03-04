@@ -1,0 +1,155 @@
+{
+  "projectType": "framework",
+  "projectName": "UI-Router Core",
+  "projectDescription": "Framework-agnostic, state-based routing library for JavaScript Single Page Applications",
+  "theme": "aspen",
+  "primaryColor": "#139ed8",
+  "lightColor": "#63b4c6",
+  "darkColor": "#b3cab4",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/overview",
+              "concepts/states",
+              "concepts/state-tree",
+              "concepts/transitions",
+              "concepts/urls-and-parameters",
+              "concepts/views",
+              "concepts/hooks"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/state-configuration",
+              "guides/navigation",
+              "guides/parameters",
+              "guides/nested-states",
+              "guides/transition-hooks",
+              "guides/url-routing",
+              "guides/resolve"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/plugins",
+              "advanced/framework-integration",
+              "advanced/custom-location-services",
+              "advanced/lazy-loading"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core",
+            "pages": [
+              "api/uirouter",
+              "api/globals"
+            ]
+          },
+          {
+            "group": "State",
+            "pages": [
+              "api/state-service",
+              "api/state-registry",
+              "api/state-declaration",
+              "api/state-object",
+              "api/target-state"
+            ]
+          },
+          {
+            "group": "Transition",
+            "pages": [
+              "api/transition-service",
+              "api/transition",
+              "api/transition-hooks"
+            ]
+          },
+          {
+            "group": "URL",
+            "pages": [
+              "api/url-service",
+              "api/url-config",
+              "api/url-rules",
+              "api/url-matcher"
+            ]
+          },
+          {
+            "group": "Parameters",
+            "pages": [
+              "api/param",
+              "api/param-types",
+              "api/param-declaration"
+            ]
+          },
+          {
+            "group": "Resolve",
+            "pages": [
+              "api/resolvable",
+              "api/resolve-context"
+            ]
+          },
+          {
+            "group": "View",
+            "pages": [
+              "api/view-service"
+            ]
+          },
+          {
+            "group": "Vanilla",
+            "pages": [
+              "api/location-services",
+              "api/location-config"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "State-machine based routing with hierarchical states",
+    "Transaction-like state transitions with lifecycle hooks",
+    "Flexible URL routing with typed parameters",
+    "Named and nested view support",
+    "Plugin architecture for framework integration",
+    "Asynchronous resolve dependencies"
+  ],
+  "publicApiSurface": [
+    "UIRouter",
+    "StateService",
+    "StateRegistry",
+    "StateDeclaration",
+    "TransitionService",
+    "Transition",
+    "UrlService",
+    "UrlConfig",
+    "UrlRules",
+    "ViewService",
+    "Param",
+    "ParamType",
+    "Resolvable",
+    "ResolveContext",
+    "UIRouterPlugin",
+    "LocationServices",
+    "LocationConfig",
+    "HookRegistry",
+    "TransitionHook"
+  ]
+}
