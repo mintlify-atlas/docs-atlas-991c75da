@@ -1,0 +1,508 @@
+---
+title: 'StateRegistry'
+description: 'Registry for managing state declarations and lifecycle'
+---
+
+## Overview
+
+The `StateRegistry` is responsible for managing all registered states in your UI-Router application. It provides methods to register, deregister, retrieve states, and listen for registry changes.
+
+Access the state registry via `router.stateRegistry`.
+
+## State Management Methods
+
+### register
+
+Adds a state to the registry.
+
+```typescript
+register(stateDefinition: StateDeclaration): StateObject
+```
+
+**Parameters**:
+- `stateDefinition` - The state declaration object to register
+
+**Return value**: The internal StateObject. If successfully registered, the object is fully built. If only queued, the object is not fully built yet.
+
+**Behavior**:
+- Registers a StateDeclaration immediately if its parent exists
+- Queues the state for registration if its parent isn't yet registered
+- Automatically registers queued child states when parent is registered
+
+**Example - Basic registration**:
+```typescript
+const homeState = {
+  name: 'home',
+  url: '/home',
+  component: HomeComponent
+};
+
+const stateObj = stateRegistry.register(homeState);
+```
+
+**Example - Nested states**:
+```typescript
+// Parent state
+stateRegistry.register({
+  name: 'users',
+  url: '/users',
+  component: UsersComponent
+});
+
+// Child state (registered after parent)
+stateRegistry.register({
+  name: 'users.detail',
+  url: '/:userId',
+  component: UserDetailComponent
+});
+```
+
+**Example - With explicit parent**:
+```typescript
+stateRegistry.register({
+  name: 'detail',
+  parent: 'users',
+  url: '/:userId',
+  component: UserDetailComponent
+});
+// Creates 'users.detail' state
+```
+
+### deregister
+
+Removes a state from the registry.
+
+```typescript
+deregister(stateOrName: StateOrName): StateObject[]
+```
+
+**Parameters**:
+- `stateOrName` - The state's name or state object to deregister
+
+**Return value**: An array of deregistered StateObjects (including children).
+
+**Behavior**:
+- Removes the specified state from the registry
+- Automatically removes all child states
+- Removes associated URL rules
+- Triggers `'deregistered'` event for listeners
+
+**Example - Deregister by name**:
+```typescript
+const removed = stateRegistry.deregister('admin');
+console.log(`Removed ${removed.length} states`);
+```
+
+**Example - Deregister by object**:
+```typescript
+const state = stateRegistry.get('admin');
+if (state) {
+  stateRegistry.deregister(state);
+}
+```
+
+**Example - Remove feature module**:
+```typescript
+// Removes 'admin' and all 'admin.**' child states
+stateRegistry.deregister('admin');
+```
+
+### get
+
+Gets registered StateDeclaration object(s).
+
+```typescript
+// Get all states
+get(): StateDeclaration[]
+
+// Get specific state
+get(stateOrName: StateOrName, base?: StateOrName): StateDeclaration
+```
+
+**Parameters**:
+- `stateOrName` - Optional. State name (absolute or relative) or state object
+- `base` - Optional. Base state for resolving relative references
+
+**Return value**:
+- If no arguments: array of all registered StateDeclaration objects
+- If state specified: the matching StateDeclaration, or `null` if not registered
+
+**Example - Get all states**:
+```typescript
+const allStates = stateRegistry.get();
+console.log(`Total states: ${allStates.length}`);
+
+allStates.forEach(state => {
+  console.log(`State: ${state.name}, URL: ${state.url}`);
+});
+```
+
+**Example - Get specific state**:
+```typescript
+const homeState = stateRegistry.get('home');
+if (homeState) {
+  console.log(`Home URL: ${homeState.url}`);
+} else {
+  console.log('Home state not registered');
+}
+```
+
+**Example - Relative reference**:
+```typescript
+// Get 'parent.child' state
+const childState = stateRegistry.get('.child', 'parent');
+
+// Get parent state using '^'
+const parentState = stateRegistry.get('^', 'parent.child');
+```
+
+### root
+
+Gets the implicit root state.
+
+```typescript
+root(): StateObject
+```
+
+**Return value**: The root StateObject.
+
+**Behavior**:
+- Returns the root of the state tree
+- The root state is implicitly created by UI-Router
+- Has name `''` (empty string) and URL `'^'`
+- All states are descendants of the root
+
+<Note>
+This returns the internal StateObject representation, not a StateDeclaration.
+</Note>
+
+**Example**:
+```typescript
+const rootState = stateRegistry.root();
+console.log(`Root state: ${rootState.name}`);
+console.log(`Root URL: ${rootState.url}`);
+```
+
+## Change Listeners
+
+### onStatesChanged
+
+Listen for state registry events.
+
+```typescript
+onStatesChanged(listener: StateRegistryListener): () => void
+```
+
+**Parameters**:
+- `listener` - Callback function invoked when states are registered/deregistered
+
+**Listener signature**:
+```typescript
+type StateRegistryListener = (
+  event: 'registered' | 'deregistered',
+  states: StateDeclaration[]
+) => void
+```
+
+**Return value**: A deregistration function.
+
+**Behavior**:
+- Called whenever states are registered or deregistered
+- Receives the event type and array of affected states
+- Use returned function to stop listening
+
+**Example - Track all states**:
+```typescript
+let allStates = stateRegistry.get();
+
+const deregisterFn = stateRegistry.onStatesChanged((event, states) => {
+  switch (event) {
+    case 'registered':
+      states.forEach(state => {
+        allStates.push(state);
+        console.log(`State registered: ${state.name}`);
+      });
+      break;
+      
+    case 'deregistered':
+      states.forEach(state => {
+        const idx = allStates.indexOf(state);
+        if (idx !== -1) {
+          allStates.splice(idx, 1);
+          console.log(`State deregistered: ${state.name}`);
+        }
+      });
+      break;
+  }
+});
+
+// Later, stop listening
+deregisterFn();
+```
+
+**Example - Lazy loading notification**:
+```typescript
+stateRegistry.onStatesChanged((event, states) => {
+  if (event === 'registered') {
+    console.log(`Lazy loaded ${states.length} states:`);
+    states.forEach(s => console.log(`  - ${s.name}`));
+  }
+});
+```
+
+## State Builder API
+
+### decorator
+
+Registers a BuilderFunction for a specific StateObject property.
+
+```typescript
+decorator(property: string, builderFunction: BuilderFunction): () => void
+```
+
+**Parameters**:
+- `property` - The name of the StateObject property (e.g., `'parent'`, `'url'`, `'path'`)
+- `builderFunction` - The function that builds the property
+
+**Return value**: A deregistration function.
+
+**Behavior**:
+- Registers a function to build/process a specific state property
+- Multiple BuilderFunctions can be registered for the same property
+- BuilderFunctions are used when building StateObject from StateDeclaration
+- Applied to all subsequently registered states
+
+**BuilderFunction signature**:
+```typescript
+type BuilderFunction = (
+  state: StateObject,
+  parent?: StateObject
+) => any
+```
+
+**Example - Add custom property**:
+```typescript
+const deregister = stateRegistry.decorator('myProperty', (state, parent) => {
+  // Access state declaration
+  const myValue = state.self.myProperty;
+  
+  // Can inherit from parent
+  if (!myValue && parent) {
+    return parent.myProperty;
+  }
+  
+  return myValue || 'default';
+});
+```
+
+**Example - Process resolve configuration**:
+```typescript
+stateRegistry.decorator('resolve', (state) => {
+  // Transform resolve configuration
+  const resolveConfig = state.self.resolve || {};
+  
+  // Add automatic resolves
+  return {
+    ...resolveConfig,
+    $state$: () => state
+  };
+});
+```
+
+**Example - Data inheritance**:
+```typescript
+stateRegistry.decorator('data', (state, parent) => {
+  const parentData = parent?.data || {};
+  const stateData = state.self.data || {};
+  
+  // Merge parent and state data
+  return { ...parentData, ...stateData };
+});
+```
+
+## Root State Configuration
+
+The registry automatically creates a root state with the following configuration:
+
+```typescript
+{
+  name: '',
+  url: '^',
+  views: null,
+  params: {
+    '#': { value: null, type: 'hash', dynamic: true }
+  },
+  abstract: true
+}
+```
+
+**Properties**:
+- **name**: Empty string (root of hierarchy)
+- **url**: `'^'` (matches any URL)
+- **abstract**: Cannot be directly activated
+- **params**: Includes hash parameter for URL fragments
+
+## TypeScript Types
+
+### StateOrName
+
+```typescript
+type StateOrName = string | StateDeclaration | StateObject
+```
+
+Accepts a state name string, StateDeclaration object, or StateObject instance.
+
+### StateRegistryListener
+
+```typescript
+type StateRegistryListener = (
+  event: 'registered' | 'deregistered',
+  states: StateDeclaration[]
+) => void
+```
+
+Callback function for state registry change events.
+
+### BuilderFunction
+
+```typescript
+type BuilderFunction = (
+  state: StateObject,
+  parent?: StateObject
+) => any
+```
+
+Function that builds or processes a StateObject property.
+
+## Common Patterns
+
+### Bulk registration
+
+```typescript
+const states = [
+  { name: 'home', url: '/home', component: HomeComponent },
+  { name: 'about', url: '/about', component: AboutComponent },
+  { name: 'contact', url: '/contact', component: ContactComponent }
+];
+
+states.forEach(state => stateRegistry.register(state));
+```
+
+### Lazy load module states
+
+```typescript
+function lazyLoadAdminModule(transition) {
+  return import('./admin.states').then(module => {
+    // Register all admin states
+    module.adminStates.forEach(state => {
+      stateRegistry.register(state);
+    });
+    
+    return { states: module.adminStates };
+  });
+}
+
+// Register future state
+stateRegistry.register({
+  name: 'admin.**',
+  url: '/admin',
+  lazyLoad: lazyLoadAdminModule
+});
+```
+
+### Feature toggle states
+
+```typescript
+function registerFeature(featureName, states) {
+  states.forEach(state => stateRegistry.register(state));
+  
+  return () => {
+    // Deregister when feature disabled
+    states.forEach(state => {
+      stateRegistry.deregister(state.name);
+    });
+  };
+}
+
+const unregisterBeta = registerFeature('beta', betaStates);
+
+// Later, disable feature
+if (!isBetaEnabled) {
+  unregisterBeta();
+}
+```
+
+### Find states by criteria
+
+```typescript
+function findStatesByData(key, value) {
+  return stateRegistry.get().filter(state => {
+    return state.data && state.data[key] === value;
+  });
+}
+
+// Find all states requiring authentication
+const protectedStates = findStatesByData('requiresAuth', true);
+```
+
+### Validate state configuration
+
+```typescript
+stateRegistry.onStatesChanged((event, states) => {
+  if (event === 'registered') {
+    states.forEach(state => {
+      if (!state.url && !state.abstract) {
+        console.warn(`State ${state.name} has no URL`);
+      }
+      
+      if (state.data?.requiresAuth && !state.resolve?.user) {
+        console.warn(`Protected state ${state.name} missing user resolve`);
+      }
+    });
+  }
+});
+```
+
+## State Hierarchy
+
+States form a tree hierarchy based on their names:
+
+```typescript
+// Register parent and children
+stateRegistry.register({ name: 'app', url: '/app' });
+stateRegistry.register({ name: 'app.home', url: '/home' });
+stateRegistry.register({ name: 'app.about', url: '/about' });
+stateRegistry.register({ name: 'app.about.team', url: '/team' });
+
+// Hierarchy:
+// '' (root)
+//   └── app
+//       ├── app.home
+//       └── app.about
+//           └── app.about.team
+```
+
+**URL composition**:
+- `app` = `/app`
+- `app.home` = `/app/home`
+- `app.about` = `/app/about`
+- `app.about.team` = `/app/about/team`
+
+## Internal Properties
+
+The StateRegistry has several internal properties (marked with underscore prefix):
+
+- `matcher` - StateMatcher for finding states
+- `builder` - StateBuilder for building StateObjects
+- `stateQueue` - StateQueueManager for queued registrations
+- `listeners` - Array of StateRegistryListener functions
+
+<Warning>
+These are internal APIs and subject to change. Do not access directly.
+</Warning>
+
+## See Also
+
+- [StateService](/api/state-service) - State navigation and management
+- [StateDeclaration](/api/state-declaration) - State configuration interface
+- [StateObject](/api/state-object) - Internal state representation

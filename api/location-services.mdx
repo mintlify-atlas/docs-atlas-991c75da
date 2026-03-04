@@ -1,0 +1,216 @@
+---
+title: LocationServices
+description: Low-level URL read/write interface
+---
+
+The `LocationServices` interface handles low-level URL read/write operations and listens for URL changes.
+
+## Overview
+
+```typescript
+interface LocationServices extends Disposable
+```
+
+This interface is implemented by location service providers that handle the underlying URL mechanism. UI-Router Core includes three basic implementations:
+
+- **PushStateLocationService** - HTML5 pushState API
+- **HashLocationService** - Hash-based URLs  
+- **MemoryLocationService** - In-memory URLs (no browser integration)
+
+## Methods
+
+### url()
+
+Gets or updates the URL.
+
+```typescript
+url(newurl?: string, replace?: boolean, state?: any): string
+```
+
+**Parameters:**
+- `newurl` - The new URL value (optional)
+- `replace` - When true, replaces current history entry instead of appending (optional)
+- `state` - The history's state object for pushState (optional)
+
+**Returns:** The current URL.
+
+#### Getting the URL
+
+When called without arguments, returns the current URL normalized using the internal path/search/hash values.
+
+**Example:**
+```javascript
+// Browser URL: http://mysite.com/basepath/internal/path/123?param1=foo#anchor
+locationService.url();
+// Returns: "/internal/path/123?param1=foo#anchor"
+```
+
+#### Setting the URL
+
+When `newurl` is provided, updates the URL.
+
+**Example:**
+```javascript
+locationService.url("/some/path?query=value#anchor", true);
+```
+
+### path()
+
+Gets the path part of the current URL.
+
+```typescript
+path(): string
+```
+
+**Returns:** The path portion of the URL.
+
+**Example:**
+```javascript
+// If URL is "/some/path?query=value#anchor"
+locationService.path();
+// Returns: "/some/path"
+```
+
+### search()
+
+Gets the search part of the current URL as an object.
+
+```typescript
+search(): { [key: string]: any }
+```
+
+**Returns:** The search (query) portion of the URL as an object.
+
+**Example:**
+```javascript
+// If URL is "/some/path?query=value&foo=bar#anchor"
+locationService.search();
+// Returns: { query: 'value', foo: 'bar' }
+```
+
+### hash()
+
+Gets the hash part of the current URL.
+
+```typescript
+hash(): string
+```
+
+**Returns:** The hash (anchor) portion of the URL.
+
+**Example:**
+```javascript
+// If URL is "/some/path?query=value#anchor"
+locationService.hash();
+// Returns: "anchor"
+```
+
+### onChange()
+
+Registers a low-level URL change handler.
+
+```typescript
+onChange(callback: EventListener): Function
+```
+
+**Parameters:**
+- `callback` - Function called when the URL changes
+
+**Returns:** A function that de-registers the callback.
+
+**Note:** This is a low-level handler not recommended for general use. Use transition hooks or state events instead.
+
+**Example:**
+```javascript
+const deregister = locationService.onChange((evt) => {
+  console.log("URL changed", evt);
+});
+
+// Later...
+deregister();
+```
+
+### dispose()
+
+Cleans up the location service.
+
+```typescript
+dispose(): void
+```
+
+Called when the router is disposed to clean up event listeners and other resources.
+
+## Implementation Notes
+
+### PushStateLocationService
+
+Uses the HTML5 History API (`pushState`, `replaceState`).
+
+**Features:**
+- Clean URLs without hash
+- Requires server-side configuration
+- Works with `<base href="...">`
+
+**Example URL:** `http://example.com/app/path/to/state?query=value`
+
+### HashLocationService  
+
+Uses URL hash for routing.
+
+**Features:**
+- Works without server configuration
+- Hash prefix configurable (default: `!`)
+- URLs contain `#`
+
+**Example URL:** `http://example.com/app/#!/path/to/state?query=value`
+
+### MemoryLocationService
+
+Stores URL in memory (no browser integration).
+
+**Features:**
+- Useful for testing
+- No browser history integration
+- No actual URL changes
+
+**Use case:** Server-side rendering, testing
+
+## Creating Custom Implementations
+
+Implement the `LocationServices` interface to create custom location handling:
+
+```typescript
+class CustomLocationService implements LocationServices {
+  url(newurl?: string, replace?: boolean, state?: any): string {
+    // Implementation
+  }
+  
+  path(): string {
+    // Implementation
+  }
+  
+  search(): { [key: string]: any } {
+    // Implementation
+  }
+  
+  hash(): string {
+    // Implementation
+  }
+  
+  onChange(callback: EventListener): Function {
+    // Implementation
+  }
+  
+  dispose(): void {
+    // Implementation
+  }
+}
+
+// Register with router
+router.plugin(customLocationPlugin);
+```
+
+## Related
+
+- [LocationConfig](/api/location-config)
+- [UrlService](/api/url-service)

@@ -1,0 +1,514 @@
+---
+title: Lazy Loading
+description: Implement lazy loading for states, components, and code splitting
+---
+
+## Overview
+
+Lazy loading allows you to load code on-demand when a state is activated, reducing initial bundle size and improving application performance. UI-Router Core provides built-in support for lazy loading through the `lazyLoad` state property.
+
+## The lazyLoad Property
+
+The `lazyLoad` property (from src/state/interface.ts:545-666) is a function on state declarations that loads code asynchronously:
+
+```typescript
+interface StateDeclaration {
+  lazyLoad?: (transition: Transition, state: StateDeclaration) => Promise<LazyLoadResult>;
+}
+```
+
+### Function Parameters
+
+- **`transition`**: The current [[Transition]] object with access to parameters, injector, etc.
+- **`state`**: The [[StateDeclaration]] that the lazyLoad function is declared on
+
+### Return Value
+
+The function must return a `Promise` that resolves to a [[LazyLoadResult]]:
+
+```typescript
+export interface LazyLoadResult {
+  states?: StateDeclaration[];
+}
+```
+
+## Basic Component Lazy Loading
+
+### ES6 Dynamic Import
+
+```javascript
+// State registration
+router.stateRegistry.register({
+  name: 'admin',
+  url: '/admin',
+  lazyLoad: (transition) => import('./admin/admin.component')
+});
+
+// admin/admin.component.js
+export default {
+  name: 'admin',
+  component: AdminComponent,
+  resolve: {
+    users: (UserService) => UserService.list()
+  }
+};
+```
+
+### React Example
+
+```typescript
+import { StateDeclaration } from '@uirouter/react';
+
+const adminState: StateDeclaration = {
+  name: 'admin',
+  url: '/admin',
+  lazyLoad: async (transition) => {
+    const module = await import('./pages/Admin');
+    return {
+      states: [{
+        name: 'admin',
+        component: module.AdminPage,
+        resolve: {
+          users: async (UserService: any) => {
+            return UserService.getUsers();
+          }
+        }
+      }]
+    };
+  }
+};
+```
+
+### Angular Example
+
+```typescript
+import { StateDeclaration } from '@uirouter/angular';
+import { NgModuleFactory } from '@angular/core';
+
+const adminState: StateDeclaration = {
+  name: 'admin.**',
+  url: '/admin',
+  lazyLoad: (transition) => {
+    // Use Angular's lazy loading
+    return import('./admin/admin.module').then((module) => {
+      return {
+        states: module.ADMIN_STATES
+      };
+    });
+  }
+};
+```
+
+## Lazy Load Lifecycle
+
+The lazy load hook (from src/hooks/lazyLoad.ts:32) is executed during transitions:
+
+### Execution Flow
+
+1. **Transition starts** to a state with `lazyLoad` defined
+2. **Hook triggers** via `onBefore` transition hook
+3. **Function invoked** if not already loading (prevents duplicate calls)
+4. **Promise tracked** on the function itself to reuse across simultaneous transitions
+5. **Code loads** asynchronously
+6. **States registered** if promise resolves to [[LazyLoadResult]] with `states` array
+7. **Property removed** - `lazyLoad` deleted from state declaration after successful load
+8. **Transition retried** - original transition is retried without `lazyLoad` present
+9. **On failure** - transition fails; `lazyLoad` remains for potential retry
+
+### Implementation Details
+
+From src/hooks/lazyLoad.ts:79-112:
+
+```typescript
+export function lazyLoadState(
+  transition: Transition, 
+  state: StateDeclaration
+): Promise<LazyLoadResult> {
+  const lazyLoadFn = state.$$state().lazyLoad;
+  
+  // Store/get the lazy load promise on/from the hookfn 
+  // so it doesn't get re-invoked
+  let promise = lazyLoadFn['_promise'];
+  
+  if (!promise) {
+    const success = (result) => {
+      delete state.lazyLoad;
+      delete state.$$state().lazyLoad;
+      delete lazyLoadFn['_promise'];
+      return result;
+    };
+    
+    const error = (err) => {
+      delete lazyLoadFn['_promise'];
+      return services.$q.reject(err);
+    };
+    
+    promise = lazyLoadFn['_promise'] = services.$q
+      .when(lazyLoadFn(transition, state))
+      .then(updateStateRegistry)
+      .then(success, error);
+  }
+  
+  function updateStateRegistry(result: LazyLoadResult) {
+    if (result && Array.isArray(result.states)) {
+      result.states.forEach((_state) => 
+        transition.router.stateRegistry.register(_state)
+      );
+    }
+    return result;
+  }
+  
+  return promise;
+}
+```
+
+### Key Behaviors
+
+- **Single execution**: Promise is cached on the function to prevent concurrent loads
+- **Automatic cleanup**: On success, `lazyLoad` is removed from the state
+- **Automatic registration**: States in the result are registered automatically
+- **Transition retry**: After loading, the transition is retried
+
+## Future States (Lazy State Definitions)
+
+Future states act as placeholders for entire state trees that will be loaded later.
+
+### Future State Pattern
+
+A future state should have:
+
+1. **Name ending in `.**`** - Acts as a wildcard glob matching any nested state
+2. **URL prefix** - Matches all URLs starting with this prefix
+3. **lazyLoad function** - Returns a [[LazyLoadResult]] with state definitions
+
+### Example
+
+```javascript
+// Register future state placeholder
+router.stateRegistry.register({
+  name: 'admin.**',
+  url: '/admin',
+  lazyLoad: () => import('./admin/admin.states.js')
+});
+
+// admin/admin.states.js - Loaded on demand
+export default {
+  states: [
+    {
+      name: 'admin',
+      url: '/admin',
+      component: AdminLayout,
+      abstract: true
+    },
+    {
+      name: 'admin.users',
+      url: '/users',
+      component: UsersComponent,
+      resolve: {
+        users: (UserService) => UserService.list()
+      }
+    },
+    {
+      name: 'admin.settings',
+      url: '/settings',
+      component: SettingsComponent
+    }
+  ]
+};
+```
+
+### How Future States Work
+
+1. User navigates to `/admin/users`
+2. URL matches the `admin.**` future state prefix
+3. `lazyLoad` function executes
+4. Module loads and returns state definitions
+5. States are registered (including `admin.users`)
+6. Future state `admin.**` is replaced by `admin` state
+7. Transition retries and matches the now-registered `admin.users` state
+
+## Code Splitting Strategies
+
+### Route-based Splitting
+
+```javascript
+const states = [
+  {
+    name: 'home',
+    url: '/',
+    component: HomeComponent // Included in main bundle
+  },
+  {
+    name: 'dashboard.**',
+    url: '/dashboard',
+    lazyLoad: () => import('./dashboard/dashboard.module')
+  },
+  {
+    name: 'reports.**',
+    url: '/reports',
+    lazyLoad: () => import('./reports/reports.module')
+  },
+  {
+    name: 'settings.**',
+    url: '/settings',
+    lazyLoad: () => import('./settings/settings.module')
+  }
+];
+```
+
+### Feature Module Pattern
+
+```typescript
+// app.states.ts
+export const appStates = [
+  { name: 'home', url: '/', component: Home },
+  { name: 'products.**', url: '/products', lazyLoad: loadProducts },
+  { name: 'cart.**', url: '/cart', lazyLoad: loadCart },
+  { name: 'checkout.**', url: '/checkout', lazyLoad: loadCheckout }
+];
+
+function loadProducts() {
+  return import('./features/products').then(m => ({ states: m.PRODUCT_STATES }));
+}
+
+function loadCart() {
+  return import('./features/cart').then(m => ({ states: m.CART_STATES }));
+}
+
+function loadCheckout() {
+  return import('./features/checkout').then(m => ({ states: m.CHECKOUT_STATES }));
+}
+```
+
+### Role-based Splitting
+
+```typescript
+function lazyLoadAdmin(transition: Transition) {
+  const authService = transition.injector().get(AuthService);
+  
+  if (!authService.hasRole('admin')) {
+    return Promise.reject('Unauthorized');
+  }
+  
+  return import('./admin/admin.module').then(m => ({
+    states: m.ADMIN_STATES
+  }));
+}
+
+const adminState = {
+  name: 'admin.**',
+  url: '/admin',
+  lazyLoad: lazyLoadAdmin
+};
+```
+
+## Lazy Loading with Resolves
+
+### Loading Dependencies
+
+```typescript
+const state = {
+  name: 'product',
+  url: '/product/:id',
+  lazyLoad: async (transition) => {
+    // Load both component AND data service
+    const [componentModule, serviceModule] = await Promise.all([
+      import('./ProductComponent'),
+      import('./ProductService')
+    ]);
+    
+    // Register service with framework DI
+    registerService('ProductService', serviceModule.ProductService);
+    
+    return {
+      states: [{
+        name: 'product',
+        component: componentModule.ProductComponent,
+        resolve: {
+          product: (ProductService, $transition$) => {
+            return ProductService.get($transition$.params().id);
+          }
+        }
+      }]
+    };
+  }
+};
+```
+
+### Preloading Data
+
+```typescript
+const state = {
+  name: 'dashboard',
+  url: '/dashboard',
+  lazyLoad: async (transition) => {
+    // Preload critical data during code load
+    const [module, dashboardData] = await Promise.all([
+      import('./Dashboard'),
+      fetch('/api/dashboard').then(r => r.json())
+    ]);
+    
+    return {
+      states: [{
+        name: 'dashboard',
+        component: module.Dashboard,
+        resolve: {
+          // Provide preloaded data
+          data: () => dashboardData
+        }
+      }]
+    };
+  }
+};
+```
+
+## Error Handling
+
+### Retry on Failure
+
+```typescript
+function lazyLoadWithRetry(importFn, retries = 3) {
+  return async (transition: Transition) => {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const module = await importFn();
+        return { states: module.states };
+      } catch (error) {
+        if (i === retries - 1) throw error;
+        // Wait before retry with exponential backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
+      }
+    }
+  };
+}
+
+const state = {
+  name: 'heavy.**',
+  url: '/heavy',
+  lazyLoad: lazyLoadWithRetry(() => import('./heavy-module'))
+};
+```
+
+### Fallback State
+
+```typescript
+function lazyLoadWithFallback(importFn, fallbackState) {
+  return async (transition: Transition) => {
+    try {
+      const module = await importFn();
+      return { states: module.states };
+    } catch (error) {
+      console.error('Lazy load failed:', error);
+      // Navigate to fallback
+      return transition.router.stateService.target(fallbackState);
+    }
+  };
+}
+```
+
+## Loading Indicators
+
+### Global Loading State
+
+```typescript
+const loadingPlugin = {
+  name: 'LoadingPlugin',
+  
+  constructor(router: UIRouter) {
+    router.transitionService.onBefore(
+      { entering: (state) => !!state.lazyLoad },
+      () => {
+        showLoadingSpinner();
+      }
+    );
+    
+    router.transitionService.onFinish(
+      { entering: (state) => !!state.lazyLoad },
+      () => {
+        hideLoadingSpinner();
+      }
+    );
+  },
+  
+  dispose() {}
+};
+```
+
+## Webpack Configuration
+
+### Dynamic Import Comments
+
+```javascript
+const state = {
+  name: 'admin.**',
+  url: '/admin',
+  lazyLoad: () => import(
+    /* webpackChunkName: "admin" */
+    /* webpackPreload: true */
+    './admin/admin.module'
+  )
+};
+```
+
+### Output Configuration
+
+```javascript
+// webpack.config.js
+module.exports = {
+  output: {
+    filename: '[name].[contenthash].js',
+    chunkFilename: '[name].[contenthash].chunk.js'
+  },
+  optimization: {
+    splitChunks: {
+      chunks: 'all',
+      cacheGroups: {
+        vendor: {
+          test: /node_modules/,
+          name: 'vendor',
+          priority: 10
+        }
+      }
+    }
+  }
+};
+```
+
+## Best Practices
+
+1. **Use future states for modules** - Lazy load entire feature areas with `.**` pattern
+2. **Return LazyLoadResult** - Always return `{ states: [...] }` for automatic registration
+3. **Handle errors gracefully** - Provide fallbacks or retry logic for load failures
+4. **Avoid lazy loading critical paths** - Don't lazy load the initial/landing page
+5. **Preload likely next states** - Use route hints to preload probable next destinations
+6. **Bundle related code together** - Group interdependent states in the same lazy module
+7. **Monitor bundle sizes** - Use webpack-bundle-analyzer to optimize chunk sizes
+8. **Test lazy loading** - Verify that lazy states load correctly in development and production
+
+## Performance Tips
+
+1. **Prefetch on hover**: Load chunks when user hovers over links
+2. **Preload critical paths**: Use `<link rel="preload">` for likely routes
+3. **Use service workers**: Cache lazy chunks for offline support
+4. **Optimize chunk sizes**: Aim for 100-300KB per chunk
+5. **Leverage HTTP/2**: Parallel loading of multiple chunks
+
+## Debugging
+
+Enable transition tracing to debug lazy loading:
+
+```typescript
+router.trace.enable('TRANSITION');
+
+// You'll see output like:
+// TRANSITION: onBefore - lazyLoadHook
+// TRANSITION: Resolving lazyLoad for state: admin.**
+// TRANSITION: LazyLoad success, registered 3 states
+// TRANSITION: Retry transition to: admin.users
+```
+
+## Reference
+
+- Source: `src/hooks/lazyLoad.ts`
+- Source: `src/state/interface.ts` (lazyLoad property, LazyLoadResult)
+- Guide: [Lazy Loading Guide](https://ui-router.github.io/guides/lazyload)

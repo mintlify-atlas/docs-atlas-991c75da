@@ -1,0 +1,268 @@
+---
+title: UIRouterGlobals
+description: Global router state containing current state, params, and transition information
+---
+
+## Overview
+
+This is where UI-Router holds the global mutable state such as current state, current params, current transition, etc.
+
+Access the globals via the `router.globals` property:
+
+```typescript
+const currentState = router.globals.current;
+const currentParams = router.globals.params;
+```
+
+## Properties
+
+### params
+
+<ParamField path="params" type="StateParams">
+  Current parameter values from the latest successful transition
+</ParamField>
+
+The `params` object contains key/value pairs of the current state parameters.
+
+#### Example
+
+```typescript
+// Access current parameters
+const userId = router.globals.params.userId;
+
+// In a transition hook
+router.transitionService.onSuccess({}, (transition) => {
+  const newParams = router.globals.params;
+  console.log('Current params:', newParams);
+});
+```
+
+### current
+
+<ParamField path="current" type="StateDeclaration">
+  Current state (the to-state from the latest successful transition)
+</ParamField>
+
+The `current` property holds the public state declaration object for the currently active state.
+
+#### Example
+
+```typescript
+// Get current state name
+const stateName = router.globals.current.name;
+
+// Check if current state has certain data
+if (router.globals.current.data?.requiresAuth) {
+  // Handle authentication
+}
+
+// Access current state URL
+const url = router.globals.current.url;
+```
+
+### $current
+
+<Warning>
+  Internal API - subject to change without notice
+</Warning>
+
+<ParamField path="$current" type="StateObject">
+  Current state internal object (the to-state from the latest successful transition)
+</ParamField>
+
+This is the internal `StateObject` representation. Use the `current` property instead for public API access.
+
+### transition
+
+<ParamField path="transition" type="Transition">
+  The current started/running transition (has reached at least the onStart phase)
+</ParamField>
+
+This property holds a reference to the transition that is currently executing. It is set when a transition starts and cleared when it completes (successfully or unsuccessfully).
+
+#### Example
+
+```typescript
+// Check if a transition is currently running
+if (router.globals.transition) {
+  console.log('Transition in progress:', router.globals.transition.to().name);
+}
+
+// Access transition from a hook
+router.transitionService.onStart({}, (transition) => {
+  // transition === router.globals.transition at this point
+  console.log('Starting transition to:', transition.to().name);
+});
+```
+
+### lastStartedTransitionId
+
+<Warning>
+  Internal API - subject to change without notice
+</Warning>
+
+<ParamField path="lastStartedTransitionId" type="number" default="-1">
+  The ID of the last started transition
+</ParamField>
+
+### transitionHistory
+
+<Warning>
+  Internal API - subject to change without notice
+</Warning>
+
+<ParamField path="transitionHistory" type="Queue<Transition>">
+  Queue of all transitions (keeps the most recent 1 by default)
+</ParamField>
+
+### successfulTransitions
+
+<Warning>
+  Internal API - subject to change without notice
+</Warning>
+
+<ParamField path="successfulTransitions" type="Queue<Transition>">
+  Queue of successful transitions (keeps the most recent 1 by default)
+</ParamField>
+
+## Methods
+
+### dispose()
+
+Clears the transition history and current transition reference.
+
+```typescript
+dispose(): void
+```
+
+<Warning>
+  Internal method - typically called automatically when the router is disposed
+</Warning>
+
+#### Example
+
+```typescript
+router.globals.dispose();
+```
+
+## Usage Examples
+
+### Accessing Current State Information
+
+```typescript
+function getCurrentStateInfo() {
+  const globals = router.globals;
+  
+  return {
+    stateName: globals.current.name,
+    stateUrl: globals.current.url,
+    params: globals.params,
+    isTransitioning: !!globals.transition
+  };
+}
+```
+
+### Watching for State Changes
+
+```typescript
+// In a framework integration, you might watch globals.current
+router.transitionService.onSuccess({}, () => {
+  const state = router.globals.current;
+  const params = router.globals.params;
+  
+  console.log(`Navigated to: ${state.name}`, params);
+  updateUI(state, params);
+});
+```
+
+### Checking Authentication State
+
+```typescript
+router.transitionService.onStart({}, (transition) => {
+  const toState = transition.to();
+  const currentParams = router.globals.params;
+  
+  // Check if the target state requires authentication
+  if (toState.data?.requiresAuth) {
+    const authService = transition.injector().get('AuthService');
+    if (!authService.isAuthenticated()) {
+      // Redirect to login, preserving intended destination
+      return router.stateService.target('login', {
+        returnTo: toState.name,
+        returnParams: transition.params()
+      });
+    }
+  }
+});
+```
+
+### Displaying Loading Indicator
+
+```typescript
+// Show loading indicator when transition starts
+router.transitionService.onStart({}, (transition) => {
+  if (router.globals.transition === transition) {
+    showLoadingIndicator();
+  }
+});
+
+// Hide loading indicator when transition finishes
+router.transitionService.onFinish({}, () => {
+  hideLoadingIndicator();
+});
+```
+
+### Debugging Current State
+
+```typescript
+function debugCurrentState() {
+  const globals = router.globals;
+  
+  console.log('=== Current Router State ===');
+  console.log('State:', globals.current?.name);
+  console.log('Params:', globals.params);
+  console.log('URL:', router.urlService.url());
+  
+  if (globals.transition) {
+    console.log('Active Transition:', {
+      from: globals.transition.from().name,
+      to: globals.transition.to().name,
+      params: globals.transition.params()
+    });
+  }
+}
+```
+
+## Related Types
+
+### StateParams
+
+```typescript
+class StateParams {
+  [key: string]: any;
+  
+  $inherit(
+    newParams: object,
+    $current: StateObject,
+    $to: StateObject
+  ): object;
+}
+```
+
+Parameter values are stored as key/value pairs on the `StateParams` object.
+
+### StateDeclaration
+
+The state declaration interface defines the structure of a state configuration. See the States guide for more information.
+
+### Transition
+
+The Transition class represents a transition between two states. See the Transitions guide for more information.
+
+## Notes
+
+- The `globals` object is created automatically when the UIRouter instance is created
+- It is updated automatically by the router as transitions occur
+- All properties are mutable and change as the application navigates
+- The `params` and `current` properties reflect the state of the last **successful** transition
+- The `transition` property reflects the **currently executing** transition (if any)

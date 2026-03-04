@@ -1,0 +1,457 @@
+---
+title: "State Tree"
+description: "Hierarchical state organization and parent-child relationships"
+---
+
+# State Tree
+
+UI-Router organizes states into a hierarchical tree structure. This tree forms the foundation of state inheritance, nested views, and URL composition.
+
+## Tree Structure
+
+States form a tree where each state (except the root) has exactly one parent:
+
+```
+(root)
+├── home
+├── about
+└── users
+    ├── users.list
+    └── users.detail
+        └── users.detail.edit
+```
+
+### Root State
+
+UI-Router automatically creates an implicit root state:
+
+```typescript
+const rootStateDef: StateDeclaration = {
+  name: '',
+  url: '^',
+  views: null,
+  params: {
+    '#': { value: null, type: 'hash', dynamic: true },
+  },
+  abstract: true,
+};
+```
+
+From [`StateRegistry`](/api/state-registry)
+
+The root state:
+- Has an empty name (`''`)
+- Is abstract (cannot be navigated to)
+- Serves as the ancestor of all states
+- Defines the hash parameter (`#`)
+
+## Parent-Child Relationships
+
+### Implicit Parent (Dot Notation)
+
+Use dots (`.`) in the state name to define hierarchy:
+
+```typescript
+const states = [
+  { name: 'app', url: '/app' },
+  { name: 'app.dashboard', url: '/dashboard' },  // Parent: 'app'
+  { name: 'app.settings', url: '/settings' },    // Parent: 'app'
+  { name: 'app.settings.profile', url: '/profile' } // Parent: 'app.settings'
+];
+```
+
+<Note>
+The child state's URL is appended to the parent's URL:
+- `app.dashboard` → `/app/dashboard`
+- `app.settings.profile` → `/app/settings/profile`
+</Note>
+
+### Explicit Parent
+
+Set `parent` explicitly for cleaner names:
+
+```typescript
+const parent = {
+  name: 'app',
+  url: '/app'
+};
+
+const child = {
+  name: 'dashboard',      // No dot needed
+  parent: 'app',          // or parent: parent
+  url: '/dashboard'
+};
+// Full name becomes 'app.dashboard'
+// Full URL becomes '/app/dashboard'
+```
+
+## State Hierarchy Properties
+
+The [`StateObject`](/api/state-object) class represents states with hierarchy metadata:
+
+```typescript
+export class StateObject {
+  /** The parent StateObject */
+  public parent: StateObject;
+  
+  /** The parent StateObject objects from this state up to the root */
+  public path: StateObject[];
+  
+  /** An object containing the parent States' names as keys and true as their values */
+  public includes: { [name: string]: boolean };
+  
+  /** The nearest parent StateObject which has a URL */
+  public navigable: StateObject;
+}
+```
+
+### State Path
+
+The `path` array contains all ancestors:
+
+```typescript
+// Given state hierarchy: '' -> 'app' -> 'app.users' -> 'app.users.detail'
+const detailState = router.stateRegistry.get('app.users.detail').$$state();
+
+console.log(detailState.path.map(s => s.name));
+// Output: ['', 'app', 'app.users', 'app.users.detail']
+```
+
+### State Includes
+
+The `includes` object maps ancestor names:
+
+```typescript
+const detailState = router.stateRegistry.get('app.users.detail').$$state();
+
+console.log(detailState.includes);
+// Output: { '': true, 'app': true, 'app.users': true, 'app.users.detail': true }
+```
+
+Used by `StateService.includes()`:
+
+```typescript
+if ($state.includes('app.users')) {
+  // Current state is 'app.users' or a descendant
+}
+```
+
+## Inheritance
+
+Child states inherit properties from parent states.
+
+### URL Inheritance
+
+URLs are composed hierarchically:
+
+```typescript
+const states = [
+  { name: 'app', url: '/app' },
+  { name: 'app.users', url: '/users' },
+  { name: 'app.users.detail', url: '/:id' }
+];
+
+// Full URLs:
+// app              → /app
+// app.users        → /app/users
+// app.users.detail → /app/users/:id
+```
+
+### Parameter Inheritance
+
+Child states inherit parent parameters:
+
+```typescript
+const states = [
+  {
+    name: 'app',
+    params: {
+      locale: { value: 'en', squash: true }
+    }
+  },
+  {
+    name: 'app.users',
+    params: {
+      page: { value: 1, type: 'int' }
+    }
+    // Also has 'locale' parameter from parent
+  }
+];
+
+// Navigate with both params
+$state.go('app.users', { locale: 'fr', page: 2 });
+```
+
+### Data Inheritance
+
+The `data` property uses prototypal inheritance:
+
+```typescript
+const states = [
+  {
+    name: 'app',
+    data: {
+      requiresAuth: true,
+      layout: 'default'
+    }
+  },
+  {
+    name: 'app.admin',
+    data: {
+      requiresRole: 'admin',
+      // Inherits requiresAuth: true and layout: 'default'
+    }
+  }
+];
+
+// Access in transition hook
+transitionService.onEnter({ entering: '**' }, (trans) => {
+  const data = trans.to().data;
+  // For 'app.admin': { requiresAuth: true, layout: 'default', requiresRole: 'admin' }
+});
+```
+
+### Resolve Inheritance
+
+Child states can inject parent resolves:
+
+```typescript
+const states = [
+  {
+    name: 'app',
+    resolve: {
+      currentUser: (AuthService) => AuthService.getCurrentUser()
+    }
+  },
+  {
+    name: 'app.profile',
+    resolve: {
+      // Can inject 'currentUser' from parent
+      userProfile: (currentUser, ProfileService) => 
+        ProfileService.getProfile(currentUser.id)
+    }
+  }
+];
+```
+
+## Tree Traversal
+
+### Get Root State
+
+```typescript
+const state = router.stateRegistry.get('app.users.detail').$$state();
+const root = state.root();
+
+console.log(root.name); // ''
+```
+
+From `StateObject.root()`:
+
+```typescript
+root(): StateObject {
+  return (this.parent && this.parent.root()) || this;
+}
+```
+
+### Get Parameters with Inheritance
+
+From `StateObject.parameters()`:
+
+```typescript
+const state = router.stateRegistry.get('app.users.detail').$$state();
+
+// Get all parameters including inherited
+const allParams = state.parameters({ inherit: true });
+
+// Get only this state's parameters
+const ownParams = state.parameters({ inherit: false });
+```
+
+## Tree Changes During Transitions
+
+During a transition, the `TreeChanges` object tracks which parts of the tree are affected:
+
+```typescript
+export interface TreeChanges {
+  /** The path of nodes in the state tree that the transition is coming from */
+  from: PathNode[];
+  
+  /** The path of nodes in the state tree that the transition is going to */
+  to: PathNode[];
+  
+  /** The path of active nodes that the transition is retaining */
+  retained: PathNode[];
+  
+  /** The path of previously active nodes that the transition is exiting */
+  exiting: PathNode[];
+  
+  /** The path of nodes that the transition is entering */
+  entering: PathNode[];
+}
+```
+
+### Example Tree Changes
+
+Given a transition from `app.users.list` to `app.settings.profile`:
+
+```typescript
+// Tree structure:
+// '' -> 'app' -> 'users' -> 'users.list'
+//            └-> 'settings' -> 'settings.profile'
+
+const trans = $state.go('app.settings.profile');
+trans.onStart({}, (transition) => {
+  const tc = transition.treeChanges();
+  
+  console.log(tc.from.map(n => n.state.name));
+  // ['', 'app', 'app.users', 'app.users.list']
+  
+  console.log(tc.to.map(n => n.state.name));
+  // ['', 'app', 'app.settings', 'app.settings.profile']
+  
+  console.log(tc.retained.map(n => n.state.name));
+  // ['', 'app']
+  
+  console.log(tc.exiting.map(n => n.state.name));
+  // ['app.users.list', 'app.users']
+  
+  console.log(tc.entering.map(n => n.state.name));
+  // ['app.settings', 'app.settings.profile']
+});
+```
+
+## Abstract States as Tree Branches
+
+Abstract states are commonly used as branch points in the tree:
+
+```typescript
+const states = [
+  {
+    name: 'app',
+    abstract: true,
+    component: AppLayoutComponent,
+    resolve: {
+      appConfig: (ConfigService) => ConfigService.load()
+    }
+  },
+  {
+    name: 'app.public',
+    abstract: true,
+    component: PublicLayoutComponent
+  },
+  {
+    name: 'app.public.home',
+    component: HomeComponent
+  },
+  {
+    name: 'app.public.about',
+    component: AboutComponent
+  },
+  {
+    name: 'app.private',
+    abstract: true,
+    component: PrivateLayoutComponent,
+    data: { requiresAuth: true }
+  },
+  {
+    name: 'app.private.dashboard',
+    component: DashboardComponent
+  }
+];
+```
+
+Tree structure:
+```
+app (abstract)
+├── app.public (abstract)
+│   ├── app.public.home
+│   └── app.public.about
+└── app.private (abstract)
+    └── app.private.dashboard
+```
+
+## Visualizing the Tree
+
+You can visualize the state tree:
+
+```typescript
+function printStateTree(state = router.stateRegistry.root(), indent = 0) {
+  const prefix = '  '.repeat(indent);
+  console.log(`${prefix}${state.name || '(root)'}`);
+  
+  const children = router.stateRegistry.get()
+    .filter(s => s.$$state().parent === state);
+    
+  children.forEach(child => 
+    printStateTree(child.$$state(), indent + 1)
+  );
+}
+
+printStateTree();
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use abstract states for layouts">
+    Create abstract states to provide layout components for groups of related states.
+    
+    ```typescript
+    {
+      name: 'admin',
+      abstract: true,
+      component: AdminLayoutComponent
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Keep state names consistent">
+    Use a consistent naming convention:
+    - `users` (list)
+    - `users.detail` (detail view)
+    - `users.detail.edit` (edit form)
+  </Accordion>
+  
+  <Accordion title="Group related states">
+    Organize related functionality under a common parent:
+    
+    ```
+    app.users
+    ├── app.users.list
+    ├── app.users.detail
+    └── app.users.create
+    ```
+  </Accordion>
+  
+  <Accordion title="Use data inheritance for shared properties">
+    Set common properties on parent states:
+    
+    ```typescript
+    {
+      name: 'admin',
+      data: { requiresRole: 'admin' }
+      // All admin.* states inherit this
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="States" icon="circle-nodes" href="/concepts/states">
+    Learn about state declarations
+  </Card>
+  
+  <Card title="Transitions" icon="arrows-turn-right" href="/concepts/transitions">
+    Understand how transitions navigate the tree
+  </Card>
+  
+  <Card title="Views" icon="eye" href="/concepts/views">
+    Create nested view hierarchies
+  </Card>
+  
+  <Card title="URLs & Parameters" icon="link" href="/concepts/urls-and-parameters">
+    Configure hierarchical URLs
+  </Card>
+</CardGroup>

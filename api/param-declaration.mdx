@@ -1,0 +1,242 @@
+---
+title: ParamDeclaration
+description: Configuration interface for state parameters
+---
+
+The `ParamDeclaration` interface defines the configuration for a single state parameter in a `StateDeclaration.params` block.
+
+## Overview
+
+```typescript
+interface ParamDeclaration
+```
+
+Parameter declarations configure how parameters behave, including their type, default value, URL squashing behavior, and more.
+
+## Properties
+
+### value
+
+```typescript
+value?: any
+```
+
+The default value for this parameter. If a function, it will be injected and invoked to get the default value.
+
+**Note:** `value: undefined` means no default was specified, while `value: null` means the default is `null`.
+
+**Example:**
+```javascript
+params: {
+  param1: {
+    value: "defaultValue"
+  }
+}
+```
+
+**Shorthand:** You can map the parameter name directly to the default value:
+```javascript
+params: {
+  param1: "defaultValue",  // shorthand
+  param2: { value: "defaultValue" }  // full syntax
+}
+```
+
+### type
+
+```typescript
+type?: string | ParamType
+```
+
+The parameter's type. Can be a built-in type name or a custom `ParamType`.
+
+**Built-in types:** `string`, `path`, `query`, `hash`, `int`, `bool`, `date`, `json`, `any`
+
+**Default:**
+- Path parameters: `path`
+- Query parameters: `query`
+- Non-URL parameters: `any`
+
+**Example:**
+```javascript
+params: {
+  userId: { type: 'int' },
+  startDate: { type: 'date' }
+}
+```
+
+### array
+
+```typescript
+array?: boolean
+```
+
+Explicitly specifies the array mode of a URL parameter.
+
+- `false` - Single value
+- `true` - Array of values
+- `'auto'` (query parameters only) - Single value if one param, array if multiple
+
+**Default:**
+- `false` for path parameters
+- `'auto'` for query parameters  
+- `true` if parameter name ends in `[]`
+
+**Example:**
+```javascript
+{
+  url: '/foo/{arrayParam:int}',
+  params: {
+    arrayParam: { array: true }
+  }
+}
+
+// URL: /foo/1-2-3
+$state.go("foo", { arrayParam: [1, 2, 3] });
+```
+
+### squash
+
+```typescript
+squash?: boolean | string
+```
+
+Configures how default parameter values are represented in the URL.
+
+- `false` - Include default value in URL
+- `true` - Omit default value (and one slash if surrounded by slashes)
+- `string` - Replace default value with this string
+
+**Example:**
+```javascript
+{
+  url: '/mystate/:myparam',
+  params: {
+    myparam: 'defaultValue',
+    squash: true
+  }
+}
+
+// URL: /mystate/
+$state.go('mystate', { myparam: 'defaultParamValue' });
+
+// URL: /mystate/someOtherValue
+$state.go('mystate', { myparam: 'someOtherValue' });
+```
+
+### dynamic
+
+```typescript
+dynamic?: boolean
+```
+
+When `true`, changes to the parameter value will not cause the state to be entered/exited.
+
+Normally, if a parameter value changes, the state is reloaded. With `dynamic: true`, a transition still occurs, but the state doesn't exit/enter and resolves aren't re-fetched.
+
+Useful for search/paging/sorting UI where the component updates itself.
+
+**Default:** `false`
+
+**Example:**
+```javascript
+{
+  url: '/search?term&page',
+  params: {
+    page: { value: 1, dynamic: true }
+  },
+  controller: function($transition$) {
+    // Watch for parameter changes
+    $transition$.onSuccess({}, () => {
+      this.page = $transition$.params().page;
+      this.loadResults();
+    });
+  }
+}
+```
+
+### raw
+
+```typescript
+raw?: boolean
+```
+
+Disables URL-encoding of parameter values.
+
+Useful for "slug" URLs with parameter values containing slashes.
+
+**Warning:** Be careful with special characters that could disrupt URL parsing (e.g., `?`, `#`).
+
+**Default:** `false`
+
+**Example:**
+```javascript
+{
+  url: '/product/:slug',
+  params: {
+    slug: { type: 'string', raw: true }
+  }
+}
+
+// Allows: { slug: 'camping/tents/awesome_tent' }
+// URL: /product/camping/tents/awesome_tent
+// Instead of: /product/camping%2Ftents%2Fawesome_tent
+```
+
+### inherit
+
+```typescript
+inherit?: boolean
+```
+
+Enables/disables inheriting of this parameter's value during transitions.
+
+When a transition runs with `inherit: true`, current parameter values are inherited. However, parameters with `inherit: false` will not be inherited.
+
+**Default:** `true`
+
+**Example:**
+```javascript
+{
+  url: '/:fooId?mode&refresh',
+  params: {
+    refresh: { inherit: false }
+  }
+}
+
+$state.go('foo', { fooId: 1234, mode: 'list', refresh: true });
+
+// Later, in a template:
+// <ui-sref="foo({ fooId: 4567 })">
+// Inherited params: { fooId: 4567, mode: 'list' }
+// refresh: true is not inherited
+```
+
+## Example
+
+Complete parameter declaration example:
+
+```javascript
+{
+  url: '/mystate/:start?{count:int}',
+  params: {
+    start: {
+      type: 'date',
+      value: new Date(),
+      squash: true
+    },
+    count: 0,  // shorthand for { value: 0 }
+    nonUrlParam: {
+      type: "int",
+      array: true,
+      value: []
+    }
+  }
+}
+```
+
+## Related
+
+- [ParamType](/api/param-types)
+- [Param](/api/param)
+- [UrlConfig](/api/url-config)

@@ -1,0 +1,190 @@
+---
+title: UrlConfig
+description: API to customize URL behavior and retrieve URL configuration
+---
+
+The `UrlConfig` API customizes the URL behavior and retrieves URL configuration metadata.
+
+## Overview
+
+Access the `UrlConfig` API via `router.urlService.config`.
+
+```typescript
+class UrlConfig implements Disposable
+```
+
+## Configuration Methods
+
+### caseInsensitive()
+
+Defines whether URL matching should be case sensitive.
+
+```typescript
+public caseInsensitive(value?: boolean): boolean
+```
+
+**Parameters:**
+- `value` - `false` to match URLs in a case-sensitive manner; `true` for case-insensitive (optional)
+
+**Returns:** The current value of `caseInsensitive`.
+
+**Example:**
+```javascript
+// Allow case insensitive url matches
+urlService.config.caseInsensitive(true);
+```
+
+### strictMode()
+
+Defines whether URLs should match trailing slashes.
+
+```typescript
+public strictMode(value?: boolean): boolean
+```
+
+**Parameters:**
+- `value` - `false` to match trailing slashes in URLs; `true` for strict mode (optional)
+
+**Returns:** The current value of `strictMode`.
+
+**Default:** `true` (trailing slashes must match exactly)
+
+**Example:**
+```javascript
+// Allow optional trailing slashes
+urlService.config.strictMode(false);
+```
+
+### defaultSquashPolicy()
+
+Sets the default behavior when generating or matching URLs with default parameter values.
+
+```typescript
+public defaultSquashPolicy(value?: boolean | string): boolean | string
+```
+
+**Parameters:**
+- `value` - The squash policy:
+  - `false` or `'nosquash'`: Don't squash default parameter values from the URL
+  - `true` or `'slash'`: Squash default values and remove one slash if surrounded by slashes
+  - Any other string (e.g., `'~'`): Replace the default value with this string
+
+**Returns:** The current value of `defaultSquashPolicy`.
+
+**Example:**
+```javascript
+// Remove default parameter values from the url
+urlService.config.defaultSquashPolicy(true);
+```
+
+### type()
+
+Creates and registers a custom parameter type.
+
+```typescript
+public type(name: string, definition?: ParamTypeDefinition, definitionFn?: () => ParamTypeDefinition): ParamType | this
+```
+
+**Parameters:**
+- `name` - The type name
+- `definition` - The type definition (optional)
+- `definitionFn` - A function that returns a type definition to be merged with `definition` (optional)
+
+**Returns:** 
+- If only `name` is specified: the registered `ParamType` or `undefined`
+- If `definition` is specified: `this` (for chaining)
+
+**Note:** Register custom types before using them in a state definition.
+
+**Example:**
+```javascript
+// Encode object parameter as JSON string
+urlService.config.type('myjson', {
+  encode: (obj) => JSON.stringify(obj),
+  decode: (str) => JSON.parse(str),
+  is: (val) => typeof(val) === 'object',
+  pattern: /[^/]+/,
+  equals: (a, b) => _.isEqual(a, b),
+});
+```
+
+## Information Methods
+
+These methods return information about the current location configuration:
+
+### baseHref()
+
+Gets the base HREF.
+
+```typescript
+public baseHref(): string
+```
+
+**Returns:** The application's base href (e.g., `http://localhost/approot/`)
+
+### host()
+
+Gets the host.
+
+```typescript
+public host(): string
+```
+
+**Returns:** The host (e.g., `localhost`)
+
+### port()
+
+Gets the port.
+
+```typescript
+public port(): number
+```
+
+**Returns:** The port number (e.g., `80`)
+
+### protocol()
+
+Gets the protocol.
+
+```typescript
+public protocol(): string
+```
+
+**Returns:** The protocol (e.g., `http`)
+
+### html5Mode()
+
+Returns true when running in pushstate mode.
+
+```typescript
+public html5Mode(): boolean
+```
+
+**Returns:** `true` when running in HTML5 mode (pushstate mode)
+
+### hashPrefix()
+
+Gets or sets the hash prefix.
+
+```typescript
+public hashPrefix(newprefix?: string): string
+```
+
+This only applies when not running in HTML5 mode (pushstate mode).
+
+**Parameters:**
+- `newprefix` - The new hash prefix (optional)
+
+**Returns:** The current hash prefix (e.g., `!` for hashbang URLs)
+
+**Example:**
+```javascript
+// If the current url is http://localhost/app#!/uirouter/path/#anchor
+urlService.config.hashPrefix(); // returns "!"
+```
+
+## Related
+
+- [UrlService](/api/url-service)
+- [ParamType](/api/param-types)
+- [ParamDeclaration](/api/param-declaration)

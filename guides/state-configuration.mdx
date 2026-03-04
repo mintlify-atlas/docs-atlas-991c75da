@@ -1,0 +1,500 @@
+---
+title: State Configuration
+description: Complete guide to configuring states with all available options in UI-Router Core
+---
+
+# State Configuration
+
+States are the fundamental building blocks of UI-Router. This guide covers all configuration options available when defining states.
+
+## Basic State Definition
+
+A state is defined using a `StateDeclaration` object with a unique name:
+
+```typescript
+const homeState = {
+  name: 'home',
+  url: '/home',
+  component: HomeComponent
+};
+
+router.stateRegistry.register(homeState);
+```
+
+## Core Configuration Options
+
+### Name (Required)
+
+The `name` property uniquely identifies the state:
+
+```typescript
+{
+  name: 'home'  // Simple state
+}
+
+{
+  name: 'home.dashboard'  // Nested state using dot notation
+}
+```
+
+### URL Pattern
+
+Define the URL fragment for the state:
+
+```typescript
+{
+  name: 'user',
+  url: '/users/:userId',  // Path parameter
+  // Matches: /users/123, /users/abc
+}
+
+{
+  name: 'search',
+  url: '/search?query&page',  // Query parameters
+  // Matches: /search?query=hello&page=2
+}
+
+{
+  name: 'product',
+  url: '/products/{productId:int}',  // Typed parameter
+  // Only matches integers: /products/42
+}
+```
+
+See [URL Routing](/guides/url-routing) for detailed URL configuration.
+
+### Parent State
+
+Explicitly define a parent state:
+
+```typescript
+{
+  name: 'child',
+  parent: 'parentState',  // String reference
+  url: '/child'
+}
+
+// Or use object reference
+const parent = { name: 'parent', url: '/parent' };
+const child = {
+  name: 'child',
+  parent: parent,  // Object reference
+  url: '/child'
+};
+```
+
+See [Nested States](/guides/nested-states) for hierarchy management.
+
+### Abstract States
+
+Abstract states cannot be directly activated but provide shared configuration:
+
+```typescript
+{
+  name: 'admin',
+  abstract: true,
+  url: '/admin',
+  resolve: {
+    auth: (AuthService) => AuthService.checkAdmin()
+  }
+}
+
+{
+  name: 'admin.users',
+  url: '/users',
+  // Inherits /admin URL and auth resolve
+}
+```
+
+## Parameter Configuration
+
+Define and configure state parameters:
+
+```typescript
+{
+  name: 'articles',
+  url: '/articles/:categoryId?{sort:string}&{page:int}',
+  params: {
+    categoryId: {
+      type: 'int',
+      value: null  // Default value
+    },
+    sort: {
+      type: 'string',
+      value: 'date',
+      squash: true  // Omit from URL if default
+    },
+    page: {
+      value: 1,
+      dynamic: true  // Don't reload state on change
+    },
+    // Non-URL parameter
+    filter: {
+      value: [],
+      array: true
+    }
+  }
+}
+```
+
+Key parameter options:
+- `type`: Parameter type (string, int, date, etc.)
+- `value`: Default value
+- `array`: Treat as array of values
+- `squash`: Omit default values from URL
+- `dynamic`: Don't reload state when changed
+- `raw`: Disable URL encoding
+- `inherit`: Control parameter inheritance
+
+See [Parameters](/guides/parameters) for complete details.
+
+## Resolve - Async Data Loading
+
+Fetch data before activating the state:
+
+### Object Syntax
+
+```typescript
+{
+  name: 'user',
+  url: '/users/:userId',
+  resolve: {
+    // Simple value
+    appName: () => 'My Application',
+    
+    // Async data with dependencies
+    user: (UserService, $transition$) => {
+      return UserService.getUser($transition$.params().userId);
+    },
+    
+    // Depend on other resolves
+    permissions: (user, PermissionService) => {
+      return PermissionService.getForUser(user.id);
+    }
+  }
+}
+```
+
+### Array Syntax (Advanced)
+
+```typescript
+{
+  name: 'dashboard',
+  resolve: [
+    {
+      token: 'metrics',
+      deps: ['MetricsService', 'Transition'],
+      resolveFn: (metricsService, trans) => {
+        return metricsService.fetch(trans.params());
+      },
+      policy: { when: 'EAGER', async: 'WAIT' }
+    }
+  ]
+}
+```
+
+### Resolve Policy
+
+Control when and how resolves are fetched:
+
+```typescript
+{
+  name: 'lazyState',
+  resolvePolicy: {
+    when: 'LAZY',    // Fetch just before entering (default)
+                     // or 'EAGER' to fetch earlier
+    async: 'WAIT'    // Wait for resolve before proceeding (default)
+                     // or 'NOWAIT' to continue without waiting
+  },
+  resolve: {
+    data: (DataService) => DataService.load()
+  }
+}
+```
+
+See [Resolve](/guides/resolve) for detailed information.
+
+## Data - State Metadata
+
+Store arbitrary metadata that child states inherit:
+
+```typescript
+{
+  name: 'secure',
+  data: {
+    requiresAuth: true,
+    roles: ['admin', 'user'],
+    title: 'Secure Area'
+  }
+}
+
+// Access in transition hooks
+transitionService.onBefore({ to: '**' }, (transition) => {
+  const requiresAuth = transition.to().data?.requiresAuth;
+  if (requiresAuth && !isAuthenticated()) {
+    return router.stateService.target('login');
+  }
+});
+```
+
+## Redirect
+
+Automatically redirect when entering a state:
+
+```typescript
+// Simple string redirect
+{
+  name: 'oldPath',
+  redirectTo: 'newPath'
+}
+
+// Object with params
+{
+  name: 'index',
+  redirectTo: { state: 'home', params: { tab: 'welcome' } }
+}
+
+// Function for conditional redirects
+{
+  name: 'profile',
+  redirectTo: (transition) => {
+    const userId = transition.params().userId;
+    if (!userId) {
+      return { state: 'login' };
+    }
+    // Return nothing to allow transition
+  }
+}
+
+// Async redirect with resolves
+{
+  name: 'admin',
+  redirectTo: async (transition) => {
+    const auth = await transition.injector().getAsync('auth');
+    if (!auth.isAdmin) {
+      return 'unauthorized';
+    }
+  }
+}
+```
+
+## Lifecycle Hooks
+
+Define hooks that run during state transitions:
+
+```typescript
+{
+  name: 'analytics',
+  onEnter: (transition, state) => {
+    console.log(`Entering ${state.name}`);
+    // Track page view
+    analytics.pageView(state.name);
+  },
+  
+  onRetain: (transition, state) => {
+    console.log(`Retained ${state.name}`);
+  },
+  
+  onExit: (transition, state) => {
+    console.log(`Exiting ${state.name}`);
+    // Clean up resources
+  }
+}
+```
+
+See [Transition Hooks](/guides/transition-hooks) for comprehensive hook documentation.
+
+## Lazy Loading
+
+Load state code and definitions on-demand:
+
+```typescript
+// Future state placeholder
+{
+  name: 'admin.**',
+  url: '/admin',
+  lazyLoad: async (transition, state) => {
+    // Dynamic import of module
+    const module = await import('./admin/admin.module');
+    
+    // Return states to register
+    return {
+      states: module.adminStates
+    };
+  }
+}
+```
+
+## Dynamic States
+
+Mark all parameters as dynamic to prevent state reload:
+
+```typescript
+{
+  name: 'search',
+  url: '/search?query&filters&page',
+  dynamic: true,  // All params are dynamic
+  // Component can react to param changes without reload
+}
+```
+
+## Views Configuration
+
+Target named views (framework-specific):
+
+```typescript
+{
+  name: 'layout',
+  views: {
+    'header': {
+      component: HeaderComponent
+    },
+    'content': {
+      component: ContentComponent
+    },
+    'sidebar': {
+      component: SidebarComponent
+    }
+  }
+}
+
+// Target ancestor views
+{
+  name: 'layout.detail',
+  views: {
+    'content@layout': {  // Target 'content' view in 'layout' state
+      component: DetailComponent
+    }
+  }
+}
+```
+
+## Complete Example
+
+A fully configured state with all options:
+
+```typescript
+const articleState = {
+  name: 'blog.article',
+  url: '/articles/:articleId?{version:int}',
+  
+  params: {
+    articleId: {
+      type: 'int',
+      squash: false
+    },
+    version: {
+      value: 1,
+      dynamic: true,
+      squash: true
+    },
+    highlightSection: {
+      inherit: false,
+      value: null
+    }
+  },
+  
+  resolve: {
+    article: (ArticleService, $transition$) => {
+      const id = $transition$.params().articleId;
+      return ArticleService.getById(id);
+    },
+    
+    comments: (article, CommentService) => {
+      return CommentService.getForArticle(article.id);
+    }
+  },
+  
+  resolvePolicy: {
+    when: 'LAZY',
+    async: 'WAIT'
+  },
+  
+  data: {
+    requiresAuth: true,
+    pageTitle: 'Article',
+    breadcrumb: 'Article Detail'
+  },
+  
+  onEnter: (transition, state) => {
+    console.log('Entered article state');
+  },
+  
+  onExit: (transition, state) => {
+    console.log('Exited article state');
+  }
+};
+
+router.stateRegistry.register(articleState);
+```
+
+## Best Practices
+
+<Steps>
+
+### Use meaningful state names
+
+Choose descriptive names that reflect the state's purpose:
+```typescript
+// Good
+{ name: 'user.profile.settings' }
+
+// Avoid
+{ name: 'state1' }
+```
+
+### Keep URLs simple and readable
+
+```typescript
+// Good
+{ url: '/products/:category/:id' }
+
+// Overly complex
+{ url: '/p/:c/:i/:v/:s' }
+```
+
+### Use abstract states for shared configuration
+
+```typescript
+{
+  name: 'app',
+  abstract: true,
+  resolve: { config: () => loadConfig() }
+}
+```
+
+### Set appropriate default parameter values
+
+```typescript
+params: {
+  page: { value: 1 },
+  pageSize: { value: 20 },
+  sortBy: { value: 'date' }
+}
+```
+
+### Use data for authorization metadata
+
+```typescript
+data: {
+  roles: ['admin'],
+  permissions: ['read', 'write']
+}
+```
+
+</Steps>
+
+## Related Documentation
+
+- [Navigation](/guides/navigation) - Navigate between states
+- [Parameters](/guides/parameters) - Work with state parameters
+- [Nested States](/guides/nested-states) - Build state hierarchies
+- [URL Routing](/guides/url-routing) - Configure URL patterns
+- [Resolve](/guides/resolve) - Async data loading
+- [Transition Hooks](/guides/transition-hooks) - Lifecycle management
+
+## API Reference
+
+- [StateDeclaration](/api/state-declaration) - Complete state configuration interface
+- [StateRegistry](/api/state-registry) - Register and manage states
+- [StateService](/api/state-service) - Access current state information

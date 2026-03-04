@@ -1,0 +1,547 @@
+---
+title: URL Routing
+description: Complete guide to URL configuration, URL rules, URL matching, and dynamic routing in UI-Router Core
+---
+
+# URL Routing
+
+UI-Router provides powerful URL routing capabilities with parameter support, pattern matching, and custom routing rules.
+
+## URL Configuration Basics
+
+Define URLs in state declarations:
+
+```typescript
+router.stateRegistry.register({
+  name: 'home',
+  url: '/home'
+});
+
+router.stateRegistry.register({
+  name: 'about',
+  url: '/about'
+});
+```
+
+## URL Patterns
+
+### Static URLs
+
+```typescript
+url: '/home'
+url: '/about/team'
+url: '/contact'
+```
+
+### Path Parameters
+
+Capture variable path segments:
+
+```typescript
+// Colon syntax
+url: '/users/:userId'
+// Matches: /users/123, /users/john
+
+// Curly brace syntax
+url: '/users/{userId}'
+// Matches: /users/123, /users/john
+
+// Multiple parameters
+url: '/posts/:category/:postId'
+// Matches: /posts/tech/123, /posts/news/456
+```
+
+### Typed Parameters
+
+Specify parameter types:
+
+```typescript
+// Integer type
+url: '/users/{userId:int}'
+// Matches: /users/123
+// Doesn't match: /users/abc
+
+// String type (default)
+url: '/users/{name:string}'
+
+// Boolean type
+url: '/settings?{enabled:bool}'
+
+// Date type
+url: '/events/{date:date}'
+
+// Custom regex
+url: '/products/{sku:[A-Z]{3}-[0-9]{4}}'
+// Matches: /products/ABC-1234
+```
+
+### Query Parameters
+
+Define parameters after `?`:
+
+```typescript
+// Simple query params
+url: '/search?query&page'
+// Matches: /search?query=test&page=2
+
+// Typed query params
+url: '/search?{query:string}&{page:int}'
+
+// Mixed path and query
+url: '/users/:userId?tab&section'
+// Matches: /users/123?tab=profile&section=settings
+
+// Multiple query params
+url: '/articles?category&author&{year:int}&tags'
+```
+
+### Optional Parameters
+
+All query parameters are optional by default:
+
+```typescript
+url: '/articles?category&year'
+
+// All match:
+// /articles
+// /articles?category=tech
+// /articles?category=tech&year=2023
+```
+
+### Catch-All Parameters
+
+Match remaining path segments:
+
+```typescript
+// Asterisk syntax
+url: '/files/*path'
+// Matches: /files/folder/subfolder/file.txt
+// params.path = 'folder/subfolder/file.txt'
+
+// Named catch-all
+url: '/docs/{path:path}'
+// Matches: /docs/guide/getting-started/introduction
+```
+
+## URL Matching
+
+### Strict vs Non-Strict
+
+Control trailing slash behavior:
+
+```typescript
+import { UrlMatcherFactory } from '@uirouter/core';
+
+const urlMatcherFactory = router.urlMatcherFactory;
+
+// Strict mode (default) - trailing slash matters
+urlMatcherFactory.strictMode(true);
+// /home matches /home but not /home/
+
+// Non-strict mode - trailing slash ignored
+urlMatcherFactory.strictMode(false);
+// /home matches both /home and /home/
+```
+
+### Case Sensitivity
+
+```typescript
+// Case insensitive (default)
+urlMatcherFactory.caseInsensitive(true);
+// /Home matches /home, /HOME, /HoMe
+
+// Case sensitive
+urlMatcherFactory.caseInsensitive(false);
+// /Home only matches /Home
+```
+
+## URL Rules
+
+URL rules provide flexible routing beyond state URLs.
+
+### Default Rule
+
+Set a fallback state:
+
+```typescript
+// Navigate to 'home' if no URL matches
+router.urlService.rules.otherwise({ state: 'home' });
+
+// Navigate with params
+router.urlService.rules.otherwise({ 
+  state: 'home', 
+  params: { tab: 'welcome' } 
+});
+
+// Function for dynamic default
+router.urlService.rules.otherwise((matchValue, url, router) => {
+  return { state: 'notfound', params: { path: url.path } };
+});
+```
+
+### URL Rewrites
+
+Rewrite URLs before matching:
+
+```typescript
+// Simple redirect
+router.urlService.rules.when('/old-path', '/new-path');
+
+// Pattern-based redirect
+router.urlService.rules.when(
+  '/old/:id',
+  '/new/:id'
+);
+
+// Function-based rewrite
+router.urlService.rules.when(
+  /^\/legacy\/(.*)$/,
+  (match, url, router) => {
+    return '/new/' + match[1];
+  }
+);
+```
+
+### Custom Rules
+
+Create advanced routing rules:
+
+```typescript
+import { UrlRule } from '@uirouter/core';
+
+// Custom rule for subdomains
+const subdomainRule: UrlRule = {
+  match: (urlParts) => {
+    const subdomain = getSubdomain(window.location.hostname);
+    if (subdomain === 'admin') {
+      return { matched: true };
+    }
+    return null;
+  },
+  
+  handler: (match, url, router) => {
+    return router.stateService.target('admin.dashboard');
+  }
+};
+
+router.urlService.rules.rule(subdomainRule);
+```
+
+### Rule Priority
+
+Rules are processed in registration order:
+
+```typescript
+// First match wins
+router.urlService.rules.when('/products/:id', '/items/:id');
+router.urlService.rules.when('/products/new', '/items/create');
+// /products/new matches first rule, becomes /items/new
+
+// Correct order
+router.urlService.rules.when('/products/new', '/items/create');
+router.urlService.rules.when('/products/:id', '/items/:id');
+// /products/new correctly becomes /items/create
+```
+
+## URL Synchronization
+
+### Defer Intercept
+
+Delay URL synchronization:
+
+```typescript
+// Prevent initial URL sync
+router.urlService.deferIntercept();
+
+// Perform async initialization
+await loadConfig();
+await loadStates();
+
+// Start listening and sync
+router.urlService.listen();
+router.urlService.sync();
+```
+
+### Manual Sync
+
+Manually trigger URL matching:
+
+```typescript
+// Match current URL and activate state
+router.urlService.sync();
+```
+
+### Listen Control
+
+```typescript
+// Start listening to URL changes
+router.urlService.listen();
+
+// Stop listening
+router.urlService.listen(false);
+```
+
+## URL Service API
+
+### Get/Set URL
+
+```typescript
+const urlService = router.urlService;
+
+// Get current URL
+const url = urlService.url();
+// Returns: '/users/123'
+
+// Set URL and trigger navigation
+urlService.url('/users/456');
+
+// Set URL without navigation
+urlService.url('/users/456', false);
+```
+
+### URL Parts
+
+```typescript
+// Get URL components
+const parts = urlService.parts();
+console.log(parts.path);    // '/users/123'
+console.log(parts.search);  // { tab: 'profile' }
+console.log(parts.hash);    // 'section'
+
+// Get/set individual parts
+const path = urlService.path();  // '/users/123'
+urlService.path('/products/456');
+
+const search = urlService.search();  // { query: 'test' }
+urlService.search({ query: 'new', page: 2 });
+
+const hash = urlService.hash();  // 'top'
+urlService.hash('bottom');
+```
+
+### Generate URLs
+
+```typescript
+// Generate URL for state
+const url = router.stateService.href('user', { userId: 123 });
+// Returns: '/users/123'
+
+// Absolute URLs
+const url = router.stateService.href('user', { userId: 123 }, {
+  absolute: true
+});
+// Returns: 'https://example.com/users/123'
+```
+
+## URL Configuration
+
+### Base HREF
+
+Set the base path:
+
+```typescript
+// Set base HREF
+router.urlService.config.baseHref('/');
+
+// For apps in subdirectories
+router.urlService.config.baseHref('/myapp/');
+// State URL: '/users'
+// Actual URL: '/myapp/users'
+```
+
+### HTML5 Mode
+
+Configure pushState vs hash mode:
+
+```typescript
+// HTML5 pushState mode (default in most implementations)
+// URLs: /home, /users/123
+
+// Hash mode
+// URLs: #!/home, #!/users/123
+```
+
+## Advanced Patterns
+
+### Multi-Segment Parameters
+
+```typescript
+url: '/files/{path:path}'
+// Matches: /files/documents/2023/report.pdf
+// params.path = 'documents/2023/report.pdf'
+```
+
+### Optional Path Segments
+
+```typescript
+// Using squash
+{
+  name: 'articles',
+  url: '/articles/:category',
+  params: {
+    category: {
+      value: 'all',
+      squash: true
+    }
+  }
+}
+// /articles -> category = 'all'
+// /articles/tech -> category = 'tech'
+```
+
+### Regular Expression Parameters
+
+```typescript
+// Custom pattern
+url: '/products/{sku:[A-Z]{2}[0-9]{4}}'
+// Matches: /products/AB1234
+// Doesn't match: /products/ABC123
+
+// Email pattern
+url: '/verify/{email:[\\w.-]+@[\\w.-]+\\.[a-z]{2,}}'
+```
+
+### Matrix Parameters (Experimental)
+
+```typescript
+// Semicolon-separated params
+url: '/search;category;minPrice;maxPrice'
+// Matches: /search;category=electronics;minPrice=100;maxPrice=500
+```
+
+## Debugging URLs
+
+### URL Matching
+
+```typescript
+import { trace } from '@uirouter/core';
+
+// Enable URL tracing
+trace.enable('URLMATCHER');
+
+// Logs:
+// URLMATCHER: Matching '/users/123' against '^/users/{userId:int}$'
+```
+
+### Current URL Info
+
+```typescript
+const current = router.urlService.parts();
+console.log('Path:', current.path);
+console.log('Query:', current.search);
+console.log('Hash:', current.hash);
+
+const state = router.stateService.current;
+console.log('State:', state.name);
+console.log('URL:', state.url);
+```
+
+## Best Practices
+
+<Steps>
+
+### Use typed parameters
+
+```typescript
+// Good - explicit type
+url: '/posts/{id:int}'
+
+// Less precise
+url: '/posts/:id'
+```
+
+### Keep URLs simple and readable
+
+```typescript
+// Good
+url: '/users/:userId/posts/:postId'
+
+// Avoid
+url: '/u/:uid/p/:pid'
+```
+
+### Use query params for optional filters
+
+```typescript
+// Good
+url: '/products?category&minPrice&maxPrice'
+
+// Avoid - path params for optional data
+url: '/products/:category/:minPrice/:maxPrice'
+```
+
+### Define otherwise rule
+
+```typescript
+// Always define a default
+router.urlService.rules.otherwise({ state: 'home' });
+```
+
+### Use URL rewrites for legacy URLs
+
+```typescript
+// Support old URLs
+router.urlService.rules.when('/old-path/:id', '/new-path/:id');
+```
+
+### Register URL rules before states
+
+```typescript
+// Rules first
+router.urlService.rules.when('/old', '/new');
+router.urlService.rules.otherwise('/home');
+
+// Then states
+router.stateRegistry.register(states);
+```
+
+</Steps>
+
+## Common Issues
+
+### Trailing Slashes
+
+```typescript
+// Problem: /home doesn't match /home/
+url: '/home'
+
+// Solution: Use non-strict mode
+router.urlMatcherFactory.strictMode(false);
+```
+
+### Parameter Type Mismatch
+
+```typescript
+// Problem: "123" doesn't match int
+url: '/users/{id:int}'
+// URL: /users/abc (doesn't match)
+
+// Solution: Check type or use string
+url: '/users/{id:string}'
+```
+
+### Overlapping URLs
+
+```typescript
+// Problem: ambiguous matching
+url: '/posts/:id'      // Matches /posts/123
+url: '/posts/featured' // Matches /posts/featured
+
+// Solution: More specific URLs first
+url: '/posts/featured' // Register first
+url: '/posts/:id'      // Register second
+```
+
+## Related Documentation
+
+- [State Configuration](/guides/state-configuration) - Define state URLs
+- [Parameters](/guides/parameters) - URL parameter configuration
+- [Navigation](/guides/navigation) - URL-based navigation
+- [Nested States](/guides/nested-states) - URL composition
+
+## API Reference
+
+- [UrlService](/api/url-service) - URL service API
+- [UrlRules](/api/url-rules) - URL rules management
+- [UrlMatcher](/api/url-matcher) - URL pattern matching
+- [UrlConfig](/api/url-config) - URL configuration

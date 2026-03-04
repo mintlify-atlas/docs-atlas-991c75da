@@ -1,0 +1,535 @@
+---
+title: Custom Location Services
+description: Implement custom LocationServices and LocationConfig for URL management
+---
+
+## Overview
+
+UI-Router Core delegates URL reading/writing to `LocationServices` and configuration to `LocationConfig`. By implementing these interfaces, you can customize how UI-Router interacts with the browser URL or use alternative URL storage mechanisms.
+
+## LocationServices Interface
+
+The `LocationServices` interface (from src/common/coreservices.ts:64-70) handles low-level URL read/write operations:
+
+```typescript
+export interface LocationServices extends Disposable {
+  /** See: [[UrlService.url]] */ 
+  url: UrlService['url'];
+  
+  /** See: [[UrlService.path]] */ 
+  path: UrlService['path'];
+  
+  /** See: [[UrlService.search]] */ 
+  search: UrlService['search'];
+  
+  /** See: [[UrlService.hash]] */ 
+  hash: UrlService['hash'];
+  
+  /** See: [[UrlService.onChange]] */ 
+  onChange: UrlService['onChange'];
+}
+```
+
+### Method Signatures
+
+```typescript
+interface LocationServices {
+  // Get or set the full URL
+  url(newUrl?: string, replace?: boolean): string;
+  
+  // Get the path portion
+  path(): string;
+  
+  // Get the search/query params as object
+  search(): { [key: string]: any };
+  
+  // Get the hash fragment
+  hash(): string;
+  
+  // Register a listener for URL changes
+  onChange(callback: EventListener): Function; // Returns deregistration function
+  
+  // Clean up resources
+  dispose(router?: UIRouter): void;
+}
+```
+
+## LocationConfig Interface
+
+The `LocationConfig` interface (from src/common/coreservices.ts:86-93) provides URL configuration metadata:
+
+```typescript
+export interface LocationConfig extends Disposable {
+  /** See: [[UrlConfig.port]] */ 
+  port: UrlConfig['port'];
+  
+  /** See: [[UrlConfig.protocol]] */ 
+  protocol: UrlConfig['protocol'];
+  
+  /** See: [[UrlConfig.host]] */ 
+  host: UrlConfig['host'];
+  
+  /** See: [[UrlConfig.baseHref]] */ 
+  baseHref: UrlConfig['baseHref'];
+  
+  /** See: [[UrlConfig.html5Mode]] */ 
+  html5Mode: UrlConfig['html5Mode'];
+  
+  /** See: [[UrlConfig.hashPrefix]] */ 
+  hashPrefix: UrlConfig['hashPrefix'];
+}
+```
+
+### Method Signatures
+
+```typescript
+interface LocationConfig {
+  port(): number;
+  protocol(): string;
+  host(): string;
+  baseHref(): string;
+  baseHref(href: string): string; // Setter overload
+  html5Mode(): boolean;
+  hashPrefix(): string;
+  hashPrefix(prefix: string): string; // Setter overload
+  dispose(): void;
+}
+```
+
+## BaseLocationServices
+
+UI-Router provides an abstract base class (from src/vanilla/baseLocationService.ts:8) to simplify implementation:
+
+```typescript
+export abstract class BaseLocationServices implements LocationServices, Disposable {
+  private _listeners: Function[] = [];
+  _location: LocationLike;
+  _history: HistoryLike;
+  
+  constructor(router: UIRouter, public fireAfterUpdate: boolean) {
+    this._location = root.location;
+    this._history = root.history;
+  }
+  
+  // Implement these abstract methods:
+  protected abstract _get(): string;
+  protected abstract _set(state: any, title: string, url: string, replace: boolean): void;
+  
+  // Pre-implemented methods:
+  hash = () => parseUrl(this._get()).hash;
+  path = () => parseUrl(this._get()).path;
+  search = () => getParams(parseUrl(this._get()).search);
+  
+  url(url?: string, replace = true): string {
+    if (isDefined(url) && url !== this._get()) {
+      this._set(null, null, url, replace);
+      if (this.fireAfterUpdate) {
+        this._listeners.forEach((cb) => cb({ url }));
+      }
+    }
+    return buildUrl(this);
+  }
+  
+  onChange(cb: EventListener) {
+    this._listeners.push(cb);
+    return () => removeFrom(this._listeners, cb);
+  }
+  
+  dispose(router: UIRouter) {
+    deregAll(this._listeners);
+  }
+}
+```
+
+### Key Points
+
+- **`_get()`**: Return the current internal URL (path + search + hash, no protocol/host/port)
+- **`_set()`**: Update the URL; update both internal state and browser URL
+- **`fireAfterUpdate`**: If true, trigger onChange listeners after URL updates
+
+## Built-in Implementations
+
+### PushStateLocationService
+
+Uses HTML5 `pushState` API (from src/vanilla/pushStateLocationService.ts:10):
+
+```typescript
+export class PushStateLocationService extends BaseLocationServices {
+  _config: LocationConfig;
+  
+  constructor(router: UIRouter) {
+    super(router, true);
+    this._config = router.urlService.config;
+    root.addEventListener('popstate', this._listener, false);
+  }
+  
+  protected _get() {
+    let { pathname, hash, search } = this._location;
+    search = splitQuery(search)[1]; // strip ?
+    hash = splitHash(hash)[1]; // strip #
+    
+    const basePrefix = this._getBasePrefix();
+    const exactBaseHrefMatch = pathname === this._config.baseHref();
+    const startsWithBase = pathname.substr(0, basePrefix.length) === basePrefix;
+    
+    pathname = exactBaseHrefMatch 
+      ? '/' 
+      : startsWithBase 
+        ? pathname.substring(basePrefix.length) 
+        : pathname;
+    
+    return pathname + (search ? '?' + search : '') + (hash ? '#' + hash : '');
+  }
+  
+  protected _set(state: any, title: string, url: string, replace: boolean) {
+    const basePrefix = this._getBasePrefix();
+    const slash = url && url[0] !== '/' ? '/' : '';
+    const fullUrl = url === '' || url === '/' 
+      ? this._config.baseHref() 
+      : basePrefix + slash + url;
+    
+    if (replace) {
+      this._history.replaceState(state, title, fullUrl);
+    } else {
+      this._history.pushState(state, title, fullUrl);
+    }
+  }
+  
+  public dispose(router: UIRouter) {
+    super.dispose(router);
+    root.removeEventListener('popstate', this._listener);
+  }
+  
+  private _getBasePrefix() {
+    return stripLastPathElement(this._config.baseHref());
+  }
+}
+```
+
+### HashLocationService
+
+Uses URL hash fragment (from src/vanilla/hashLocationService.ts:6):
+
+```typescript
+export class HashLocationService extends BaseLocationServices {
+  constructor(router: UIRouter) {
+    super(router, false);
+    root.addEventListener('hashchange', this._listener, false);
+  }
+  
+  _get() {
+    return trimHashVal(this._location.hash);
+  }
+  
+  _set(state: any, title: string, url: string, replace: boolean) {
+    this._location.hash = url;
+  }
+  
+  dispose(router: UIRouter) {
+    super.dispose(router);
+    root.removeEventListener('hashchange', this._listener);
+  }
+}
+```
+
+### MemoryLocationService
+
+Stores URL in memory (useful for testing or server-side rendering):
+
+```typescript
+export class MemoryLocationService implements LocationServices {
+  private _url: string = '';
+  private _listeners: Function[] = [];
+  
+  url(url?: string, replace?: boolean): string {
+    if (url !== undefined) {
+      this._url = url;
+      this._listeners.forEach(cb => cb({ url }));
+    }
+    return this._url;
+  }
+  
+  path(): string {
+    return parseUrl(this._url).path;
+  }
+  
+  search(): { [key: string]: any } {
+    return getParams(parseUrl(this._url).search);
+  }
+  
+  hash(): string {
+    return parseUrl(this._url).hash;
+  }
+  
+  onChange(cb: EventListener): Function {
+    this._listeners.push(cb);
+    return () => removeFrom(this._listeners, cb);
+  }
+  
+  dispose() {
+    this._listeners = [];
+  }
+}
+```
+
+## BrowserLocationConfig
+
+Standard browser-based configuration (from src/vanilla/browserLocationConfig.ts:5):
+
+```typescript
+export class BrowserLocationConfig implements LocationConfig {
+  private _baseHref = undefined;
+  private _hashPrefix = '';
+  
+  constructor(router?, private _isHtml5 = false) {}
+  
+  port(): number {
+    if (location.port) {
+      return Number(location.port);
+    }
+    return this.protocol() === 'https' ? 443 : 80;
+  }
+  
+  protocol(): string {
+    return location.protocol.replace(/:/g, '');
+  }
+  
+  host(): string {
+    return location.hostname;
+  }
+  
+  html5Mode(): boolean {
+    return this._isHtml5;
+  }
+  
+  hashPrefix(): string;
+  hashPrefix(newprefix?: string): string {
+    return isDefined(newprefix) 
+      ? (this._hashPrefix = newprefix) 
+      : this._hashPrefix;
+  }
+  
+  baseHref(href?: string): string {
+    if (isDefined(href)) this._baseHref = href;
+    if (isUndefined(this._baseHref)) this._baseHref = this.getBaseHref();
+    return this._baseHref;
+  }
+  
+  private getBaseHref() {
+    const baseTag: HTMLBaseElement = document.getElementsByTagName('base')[0];
+    if (baseTag && baseTag.href) {
+      return baseTag.href.replace(/^([^/:]*:)?/\/\/[^/]*/, '');
+    }
+    return this._isHtml5 ? '/' : location.pathname || '/';
+  }
+  
+  dispose() {}
+}
+```
+
+## Custom Implementation Example
+
+### Custom Iframe Location Service
+
+Manage routing within an iframe with parent window communication:
+
+```typescript
+import { BaseLocationServices } from '@uirouter/core/lib/vanilla';
+import { UIRouter } from '@uirouter/core';
+
+export class IframeLocationService extends BaseLocationServices {
+  private currentUrl: string = '/';
+  
+  constructor(router: UIRouter) {
+    super(router, true);
+    
+    // Listen for messages from parent window
+    window.addEventListener('message', this.handleParentMessage);
+  }
+  
+  protected _get(): string {
+    return this.currentUrl;
+  }
+  
+  protected _set(state: any, title: string, url: string, replace: boolean): void {
+    this.currentUrl = url;
+    
+    // Notify parent window of URL change
+    window.parent.postMessage({
+      type: 'url-changed',
+      url: url,
+      replace: replace
+    }, '*');
+  }
+  
+  private handleParentMessage = (event: MessageEvent) => {
+    if (event.data.type === 'navigate') {
+      this.currentUrl = event.data.url;
+      this._listeners.forEach(cb => cb({ url: event.data.url }));
+    }
+  };
+  
+  dispose(router: UIRouter) {
+    super.dispose(router);
+    window.removeEventListener('message', this.handleParentMessage);
+  }
+}
+```
+
+### Custom Electron Location Service
+
+For Electron apps without real URLs:
+
+```typescript
+export class ElectronLocationService implements LocationServices {
+  private _currentUrl = '/';
+  private _listeners: Function[] = [];
+  
+  url(url?: string, replace?: boolean): string {
+    if (url !== undefined && url !== this._currentUrl) {
+      const oldUrl = this._currentUrl;
+      this._currentUrl = url;
+      
+      // Update Electron window title
+      const { ipcRenderer } = require('electron');
+      ipcRenderer.send('url-changed', { url, replace });
+      
+      this._listeners.forEach(cb => cb({ url, oldUrl }));
+    }
+    return this._currentUrl;
+  }
+  
+  path(): string {
+    return this._currentUrl.split('?')[0].split('#')[0];
+  }
+  
+  search(): { [key: string]: any } {
+    const searchStr = this._currentUrl.split('?')[1]?.split('#')[0] || '';
+    return Object.fromEntries(new URLSearchParams(searchStr));
+  }
+  
+  hash(): string {
+    return this._currentUrl.split('#')[1] || '';
+  }
+  
+  onChange(cb: EventListener): Function {
+    this._listeners.push(cb);
+    return () => {
+      const idx = this._listeners.indexOf(cb);
+      if (idx >= 0) this._listeners.splice(idx, 1);
+    };
+  }
+  
+  dispose() {
+    this._listeners = [];
+  }
+}
+```
+
+## Creating a Location Plugin
+
+Package your location service as a plugin:
+
+```typescript
+import { UIRouter, UIRouterPlugin } from '@uirouter/core';
+import { IframeLocationService } from './iframeLocationService';
+import { BrowserLocationConfig } from '@uirouter/core/lib/vanilla';
+
+export class IframeLocationPlugin implements UIRouterPlugin {
+  name = 'IframeLocationPlugin';
+  
+  service: IframeLocationService;
+  configuration: BrowserLocationConfig;
+  
+  constructor(router: UIRouter, options: any = {}) {
+    this.service = new IframeLocationService(router);
+    this.configuration = new BrowserLocationConfig(router, options.html5Mode);
+    
+    // Replace router's location service
+    router.locationService = this.service;
+    router.locationConfig = this.configuration;
+  }
+  
+  dispose(router: UIRouter) {
+    this.service.dispose(router);
+    this.configuration.dispose();
+  }
+}
+
+// Usage:
+const router = new UIRouter();
+router.plugin(IframeLocationPlugin, { html5Mode: false });
+```
+
+## Initializing with Custom Services
+
+Provide services directly to the UIRouter constructor:
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+import { IframeLocationService } from './iframeLocationService';
+import { BrowserLocationConfig } from '@uirouter/core/lib/vanilla';
+
+const locationService = new IframeLocationService();
+const locationConfig = new BrowserLocationConfig(null, true);
+
+const router = new UIRouter(locationService, locationConfig);
+```
+
+From src/router.ts:112-115:
+
+```typescript
+constructor(
+  public locationService: LocationServices = locationServiceStub,
+  public locationConfig: LocationConfig = locationConfigStub
+) {
+  // ...
+}
+```
+
+## Testing with MemoryLocationService
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+import { MemoryLocationService, MemoryLocationConfig } from '@uirouter/core/lib/vanilla';
+
+describe('State transitions', () => {
+  let router: UIRouter;
+  
+  beforeEach(() => {
+    const locationService = new MemoryLocationService();
+    const locationConfig = new MemoryLocationConfig();
+    router = new UIRouter(locationService, locationConfig);
+    
+    // Register states
+    router.stateRegistry.register({ name: 'home', url: '/' });
+    router.stateRegistry.register({ name: 'about', url: '/about' });
+  });
+  
+  it('should navigate between states', async () => {
+    await router.stateService.go('home');
+    expect(router.locationService.url()).toBe('/');
+    
+    await router.stateService.go('about');
+    expect(router.locationService.url()).toBe('/about');
+  });
+});
+```
+
+## Best Practices
+
+1. **Extend BaseLocationServices** - Reduces boilerplate; only implement `_get()` and `_set()`
+2. **Handle cleanup properly** - Remove event listeners in `dispose()`
+3. **Support both push and replace** - Respect the `replace` parameter in `_set()`
+4. **Fire onChange correctly** - Call listeners when URL changes externally
+5. **Parse URLs consistently** - Use UI-Router's utility functions for URL parsing
+6. **Document configuration options** - Clearly explain baseHref, hashPrefix, html5Mode behavior
+7. **Test thoroughly** - Use MemoryLocationService for unit tests
+
+## Reference
+
+- Source: `src/common/coreservices.ts`
+- Source: `src/vanilla/baseLocationService.ts`
+- Source: `src/vanilla/pushStateLocationService.ts`
+- Source: `src/vanilla/hashLocationService.ts`
+- Source: `src/vanilla/browserLocationConfig.ts`

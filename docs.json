@@ -1,122 +1,139 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "UI-Router Core",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#139ed8",
+    "light": "#63b4c6",
+    "dark": "#b3cab4"
   },
-  "favicon": "/favicon.svg",
+
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/ui-router/core"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/ui-router/core"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Concepts",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "concepts/overview",
+              "concepts/states",
+              "concepts/state-tree",
+              "concepts/transitions",
+              "concepts/urls-and-parameters",
+              "concepts/views",
+              "concepts/hooks"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Guides",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "guides/state-configuration",
+              "guides/navigation",
+              "guides/parameters",
+              "guides/nested-states",
+              "guides/transition-hooks",
+              "guides/url-routing",
+              "guides/resolve"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Advanced",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "advanced/plugins",
+              "advanced/framework-integration",
+              "advanced/custom-location-services",
+              "advanced/lazy-loading"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Core",
             "pages": [
-              "api-reference/introduction"
+              "api/uirouter",
+              "api/globals"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "State",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/state-service",
+              "api/state-registry",
+              "api/state-declaration",
+              "api/state-object",
+              "api/target-state"
+            ]
+          },
+          {
+            "group": "Transition",
+            "pages": [
+              "api/transition-service",
+              "api/transition",
+              "api/transition-hooks"
+            ]
+          },
+          {
+            "group": "URL",
+            "pages": [
+              "api/url-service",
+              "api/url-config",
+              "api/url-rules",
+              "api/url-matcher"
+            ]
+          },
+          {
+            "group": "Parameters",
+            "pages": [
+              "api/param",
+              "api/param-types",
+              "api/param-declaration"
+            ]
+          },
+          {
+            "group": "Resolve",
+            "pages": [
+              "api/resolvable",
+              "api/resolve-context"
+            ]
+          },
+          {
+            "group": "View",
+            "pages": [
+              "api/view-service"
+            ]
+          },
+          {
+            "group": "Vanilla",
+            "pages": [
+              "api/location-services",
+              "api/location-config"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

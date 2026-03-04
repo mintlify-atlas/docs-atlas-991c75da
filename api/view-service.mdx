@@ -1,0 +1,257 @@
+---
+title: ViewService
+description: Pairs ui-view components with view configurations
+---
+
+The `ViewService` pairs existing `ui-view` components (in the DOM) with view configurations from state declarations.
+
+## Overview
+
+```typescript
+class ViewService
+```
+
+The ViewService is responsible for:
+- Registering `ui-view` components as they appear in the DOM
+- Activating view configs when states are entered
+- Deactivating view configs when states are exited
+- Synchronizing (pairing) `ui-view` components with their matching view configs
+
+## Methods
+
+### registerUIView()
+
+Registers a `ui-view` component.
+
+```typescript
+public registerUIView(uiView: ActiveUIView): Function
+```
+
+**Parameters:**
+- `uiView` - The ui-view metadata
+
+**Returns:** A de-registration function.
+
+When a `ui-view` component is created, it calls this method to register itself. After registration, the `sync()` method configures all `ui-view` components with their proper `ViewConfig`.
+
+**Example:**
+```javascript
+// In a ui-view component
+const deregister = viewService.registerUIView({
+  id: this.id,
+  fqn: this.fqn,
+  $type: 'ng1',
+  creationContext: this.parent,
+  configUpdated: (config) => this.applyConfig(config)
+});
+
+// Later, when component is destroyed
+deregister();
+```
+
+### sync()
+
+Synchronizes ui-views with view configs.
+
+```typescript
+public sync(): void
+```
+
+This method pairs registered `ui-view` components with matching `ViewConfig` objects. It is called automatically when:
+- A ui-view is registered/deregistered
+- View configs are activated/deactivated
+
+### activateViewConfig()
+
+Activates a ViewConfig.
+
+```typescript
+public activateViewConfig(viewConfig: ViewConfig): void
+```
+
+**Parameters:**
+- `viewConfig` - The ViewConfig to activate
+
+After calling `sync()`, the view config will be paired with a matching `ui-view`.
+
+### deactivateViewConfig()
+
+Deactivates a ViewConfig.
+
+```typescript
+public deactivateViewConfig(viewConfig: ViewConfig): void
+```
+
+**Parameters:**
+- `viewConfig` - The ViewConfig to deactivate
+
+After calling `sync()`, the view config will be un-paired from any `ui-view` with which it was paired.
+
+### createViewConfig()
+
+Creates view configs from a view declaration.
+
+```typescript
+public createViewConfig(
+  path: PathNode[],
+  decl: _ViewDeclaration
+): ViewConfig[]
+```
+
+**Parameters:**
+- `path` - The path of nodes
+- `decl` - The view declaration
+
+**Returns:** Array of created ViewConfig objects.
+
+### available()
+
+Returns the list of views currently available on the page.
+
+```typescript
+public available(): string[]
+```
+
+**Returns:** Array of fully-qualified view names.
+
+**Example:**
+```javascript
+viewService.available();
+// ['$default', '$default.header', '$default.content']
+```
+
+### active()
+
+Returns the list of views containing loaded content.
+
+```typescript
+public active(): string[]
+```
+
+**Returns:** Array of view names that have loaded content.
+
+**Example:**
+```javascript
+viewService.active();
+// ['header', 'content']
+```
+
+## Static Methods
+
+### normalizeUIViewTarget()
+
+Normalizes a view's name from a state.views configuration.
+
+```typescript
+static normalizeUIViewTarget(
+  context: ViewContext,
+  rawViewName?: string
+): { uiViewName: string; uiViewContextAnchor: string }
+```
+
+**Parameters:**
+- `context` - The context object (state declaration) that the view belongs to
+- `rawViewName` - The name of the view as declared in `StateDeclaration.views` (optional)
+
+**Returns:** Object with normalized `uiViewName` and `uiViewContextAnchor`.
+
+This should be used by framework implementations to calculate the values for `_ViewDeclaration.$uiViewName` and `_ViewDeclaration.$uiViewContextAnchor`.
+
+**Example:**
+```javascript
+// Simple view name
+ViewService.normalizeUIViewTarget(state, 'header');
+// { uiViewName: 'header', uiViewContextAnchor: 'parentState' }
+
+// View name with context
+ViewService.normalizeUIViewTarget(state, 'header@parent');
+// { uiViewName: 'header', uiViewContextAnchor: 'parent' }
+
+// Relative view name
+ViewService.normalizeUIViewTarget(state, '^.^.header');
+// { uiViewName: 'header', uiViewContextAnchor: 'grandparentState' }
+
+// Absolute view name
+ViewService.normalizeUIViewTarget(state, '!header');
+// { uiViewName: 'header', uiViewContextAnchor: '' }
+```
+
+### matches()
+
+Determines if a ui-view and ViewConfig match.
+
+```typescript
+static matches(
+  uiViewsByFqn: TypedMap<ActiveUIView>,
+  uiView: ActiveUIView
+): (viewConfig: ViewConfig) => boolean
+```
+
+**Parameters:**
+- `uiViewsByFqn` - Map of ui-views by fully-qualified name
+- `uiView` - The ui-view to match
+
+**Returns:** A function that returns `true` if a ViewConfig matches the ui-view.
+
+## ActiveUIView Interface
+
+Represents a registered `ui-view` component:
+
+```typescript
+interface ActiveUIView {
+  id: string;              // Unique identifier
+  fqn: string;            // Fully-qualified name
+  $type: string;          // View type (e.g., 'ng1', 'ng2')
+  creationContext: ViewContext;  // Parent context
+  configUpdated: (config: ViewConfig) => void;  // Called when config changes
+}
+```
+
+## ViewConfig Interface
+
+Represents a view configuration from a state:
+
+```typescript
+interface ViewConfig {
+  viewDecl: _ViewDeclaration;  // The view declaration
+  // Additional framework-specific properties
+}
+```
+
+## View Matching Algorithm
+
+The ViewService matches ui-views with view configs using:
+
+1. **Type matching**: The ui-view's `$type` must match the ViewConfig's type
+2. **Name matching**: The view name and context anchor must match
+3. **Depth sorting**: If multiple configs match, the deepest child wins
+
+## Example Scenario
+
+```javascript
+// State hierarchy
+const states = [
+  { 
+    name: 'app',
+    views: {
+      '': { component: AppComponent }  // targets ui-view in index.html
+    }
+  },
+  { 
+    name: 'app.home',
+    views: {
+      'content@app': { component: HomeComponent }  // targets ui-view named 'content' in AppComponent
+    }
+  }
+];
+
+// When navigating to 'app.home':
+// 1. ViewService activates view configs for 'app' and 'app.home'
+// 2. sync() pairs the configs with matching ui-views
+// 3. Each ui-view's configUpdated() callback is invoked
+// 4. UI framework renders the components
+```
+
+## Related
+
+- [State Declaration](/api/state-declaration)

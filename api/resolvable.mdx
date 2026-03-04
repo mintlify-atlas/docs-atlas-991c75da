@@ -1,0 +1,280 @@
+---
+title: Resolvable
+description: The basic building block for the resolve system
+---
+
+The `Resolvable` class encapsulates a state's resolve function, its dependencies, and the resolved result.
+
+## Overview
+
+```typescript
+class Resolvable implements ResolvableLiteral
+```
+
+Resolvables are the basic building blocks of UI-Router's dependency injection and async data loading system. Each resolvable has:
+- A token (name) for injection
+- A resolve function
+- Declared dependencies
+- A resolved value (once resolved)
+- A promise for the resolved value
+
+## Constructor
+
+### New Resolvable
+
+```typescript
+constructor(
+  token: any,
+  resolveFn: Function,
+  deps?: any[],
+  policy?: ResolvePolicy,
+  data?: any
+)
+```
+
+**Parameters:**
+- `token` - The injection token (e.g., `"userList"` or `UserService`)
+- `resolveFn` - Function that returns the resolved value or a promise
+- `deps` - Array of dependencies to inject into `resolveFn` (optional)
+- `policy` - The resolve policy (optional)
+- `data` - Pre-resolved data (optional)
+
+**Example:**
+```javascript
+// Inject Http service, return promise
+const resolvable1 = new Resolvable(
+  'mytoken',
+  http => http.get('foo.json').toPromise(),
+  [Http]
+);
+
+// Inject dependency, return new service instance
+const resolvable2 = new Resolvable(
+  UserService,
+  dep => new UserService(dep.data),
+  [SomeDependency]
+);
+```
+
+### Copy Constructor
+
+```typescript
+constructor(resolvable: Resolvable)
+```
+
+Creates a copy of an existing Resolvable.
+
+### From Literal
+
+```typescript
+constructor(resolvable: ResolvableLiteral)
+```
+
+Creates a Resolvable from a plain JavaScript object.
+
+## Properties
+
+### token
+
+```typescript
+token: any
+```
+
+The injection token for this resolvable.
+
+### resolveFn
+
+```typescript
+resolveFn: Function
+```
+
+The function that returns the resolved value.
+
+### deps
+
+```typescript
+deps: any[]
+```
+
+Array of dependency tokens to inject into the resolve function.
+
+### policy
+
+```typescript
+policy: ResolvePolicy
+```
+
+The resolve policy controlling when and how resolution happens.
+
+### data
+
+```typescript
+data: any
+```
+
+The resolved data value (available after resolution completes).
+
+### resolved
+
+```typescript
+resolved: boolean
+```
+
+`true` if the resolvable has been resolved.
+
+### promise
+
+```typescript
+promise: Promise<any>
+```
+
+The promise for the resolved value.
+
+## Methods
+
+### resolve()
+
+Asynchronously resolves this Resolvable's data.
+
+```typescript
+public resolve(
+  resolveContext: ResolveContext,
+  trans?: Transition
+): Promise<any>
+```
+
+**Parameters:**
+- `resolveContext` - The resolve context this resolvable is found in
+- `trans` - The transition (optional)
+
+**Returns:** A promise for the resolved data.
+
+Waits for dependencies, then invokes the resolve function and updates the Resolvable's state.
+
+### get()
+
+Gets a promise for this Resolvable's data.
+
+```typescript
+public get(
+  resolveContext: ResolveContext,
+  trans?: Transition
+): Promise<any>
+```
+
+**Parameters:**
+- `resolveContext` - The resolve context
+- `trans` - The transition (optional)
+
+**Returns:** A promise for the resolved data.
+
+Returns the existing promise if already resolved, otherwise calls `resolve()`.
+
+### getPolicy()
+
+Gets the effective resolve policy for this resolvable.
+
+```typescript
+public getPolicy(state: StateObject): ResolvePolicy
+```
+
+**Parameters:**
+- `state` - The state object
+
+**Returns:** The merged resolve policy from the resolvable, state, and defaults.
+
+### clone()
+
+Creates a copy of this Resolvable.
+
+```typescript
+public clone(): Resolvable
+```
+
+**Returns:** A new Resolvable instance.
+
+### toString()
+
+Returns a string representation.
+
+```typescript
+public toString(): string
+```
+
+**Returns:** A string describing the resolvable.
+
+## Static Methods
+
+### fromData()
+
+Creates a Resolvable from pre-resolved data.
+
+```typescript
+static fromData(token: any, data: any): Resolvable
+```
+
+**Parameters:**
+- `token` - The injection token
+- `data` - The pre-resolved data
+
+**Returns:** A new Resolvable with the data already resolved.
+
+**Example:**
+```javascript
+const resolvable = Resolvable.fromData('userId', 123);
+// resolvable.resolved === true
+// resolvable.data === 123
+```
+
+## Resolve Policy
+
+The `ResolvePolicy` controls when and how resolvables are resolved:
+
+```typescript
+interface ResolvePolicy {
+  when?: 'LAZY' | 'EAGER';
+  async?: 'WAIT' | 'NOWAIT' | PolicyAsync;
+}
+```
+
+- **when**: When to resolve
+  - `'LAZY'` (default) - Resolve when the state is being entered
+  - `'EAGER'` - Resolve as early as possible
+
+- **async**: How to handle async resolution
+  - `'WAIT'` (default) - Wait for the promise to resolve before proceeding
+  - `'NOWAIT'` - Don't wait; proceed immediately
+  - Custom function - Transform the resolved value
+
+## Example Usage
+
+Defining resolvables in a state:
+
+```javascript
+const state = {
+  name: 'user',
+  url: '/user/:userId',
+  resolve: [
+    {
+      token: 'user',
+      deps: ['UserService', Transition],
+      resolveFn: (userService, trans) => {
+        return userService.getUser(trans.params().userId);
+      }
+    },
+    {
+      token: 'permissions',
+      deps: ['user', 'PermissionService'],
+      resolveFn: (user, permService) => {
+        return permService.getPermissions(user.id);
+      },
+      policy: { async: 'NOWAIT' }
+    }
+  ]
+};
+```
+
+## Related
+
+- [ResolveContext](/api/resolve-context)
+- [State Declaration](/api/state-declaration)

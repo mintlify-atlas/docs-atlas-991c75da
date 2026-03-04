@@ -1,0 +1,507 @@
+---
+title: 'Transition'
+description: 'Individual transition instance API and lifecycle methods'
+---
+
+## Overview
+
+A `Transition` object represents a single transition between two states. It contains contextual information about the from/to states, parameters, resolves, and states being entered/exited.
+
+## Properties
+
+### $id
+
+Unique identifier for the transition.
+
+```typescript
+$id: number
+```
+
+Auto-incrementing integer starting from 0.
+
+### router
+
+Reference to the UIRouter instance.
+
+```typescript
+router: UIRouter
+```
+
+Provides access to router services like `StateService`.
+
+### promise
+
+Promise that resolves/rejects based on transition outcome.
+
+```typescript
+promise: Promise<any>
+```
+
+Resolved when transition succeeds, rejected with `Rejection` when it fails.
+
+**Example**:
+```typescript
+const transition = $state.go('newState');
+transition.promise
+  .then(() => console.log('Success!'))
+  .catch((error) => console.error('Failed:', error));
+```
+
+### success
+
+Boolean indicating if the transition completed successfully.
+
+```typescript
+success: boolean
+```
+
+- `true` - transition succeeded
+- `false` - transition failed
+- `undefined` - transition not yet complete
+
+## State Information Methods
+
+### from
+
+Returns the "from" state declaration.
+
+```typescript
+from(): StateDeclaration
+```
+
+**Example**:
+```typescript
+transitionService.onStart({}, (trans) => {
+  console.log(`Leaving ${trans.from().name}`);
+});
+```
+
+### to
+
+Returns the "to" state declaration.
+
+```typescript
+to(): StateDeclaration
+```
+
+**Example**:
+```typescript
+transitionService.onStart({}, (trans) => {
+  console.log(`Going to ${trans.to().name}`);
+});
+```
+
+### targetState
+
+Returns the TargetState object encapsulating the to state, params, and options.
+
+```typescript
+targetState(): TargetState
+```
+
+### entering
+
+Returns array of states being entered.
+
+```typescript
+entering(): StateDeclaration[]
+```
+
+**Example**:
+```typescript
+trans.entering(); // [homeState, dashboardState, widgetState]
+```
+
+### exiting
+
+Returns array of states being exited (in reverse order).
+
+```typescript
+exiting(): StateDeclaration[]
+```
+
+### retained
+
+Returns array of states that remain active.
+
+```typescript
+retained(): StateDeclaration[]
+```
+
+## Parameter Methods
+
+### params
+
+Gets parameter values for a path.
+
+```typescript
+params(pathname?: string): { [key: string]: any }
+```
+
+**Parameters**:
+- `pathname` - Path name: `'to'`, `'from'`, `'entering'`, `'exiting'`, `'retained'` (default: `'to'`)
+
+**Example**:
+```typescript
+// Get new parameter values
+const toParams = trans.params();
+const toParams = trans.params('to');
+
+// Get previous parameter values
+const fromParams = trans.params('from');
+```
+
+### paramsChanged
+
+Returns only the parameters that changed during the transition.
+
+```typescript
+paramsChanged(): { [key: string]: any }
+```
+
+**Behavior**:
+- Changed parameters show new values
+- Unchanged parameters are omitted
+- New parameters are included
+- Removed parameters have `undefined` value
+
+**Example 1** - Parameter value changed:
+```typescript
+// From: /stateA/abc/def
+// To:   /stateA/abc/xyz
+
+trans.paramsChanged(); // { param2: 'xyz' }
+```
+
+**Example 2** - Different states:
+```typescript
+// From: /stateA/abc/def
+// To:   /stateB/123
+
+trans.paramsChanged(); 
+// { param1: undefined, param2: undefined, param3: '123' }
+```
+
+**Example 3** - Child state:
+```typescript
+// From: /stateB/123
+// To:   /stateB/123/nest/456
+
+trans.paramsChanged(); // { param4: '456' }
+```
+
+## Dependency Injection
+
+### injector
+
+Creates a UIInjector for accessing resolve values.
+
+```typescript
+injector(state?: StateOrName, pathName?: string): UIInjector
+```
+
+**Parameters**:
+- `state` - Limits resolves to those accessible by the state
+- `pathName` - Path to get injector for: `'to'` (default) or `'from'`
+
+**Example - Get resolve value**:
+```typescript
+transitionService.onEnter({ entering: 'myState' }, (trans) => {
+  const myResolve = trans.injector().get('myResolve');
+  const MyService = trans.injector().get('MyService');
+});
+```
+
+**Example - Get async resolve**:
+```typescript
+transitionService.onBefore({}, (trans) => {
+  return trans.injector().getAsync('myResolve').then(value => {
+    return value !== 'ABORT';
+  });
+});
+```
+
+**Example - Scoped to specific state**:
+```typescript
+transitionService.onEnter({ to: 'foo.bar' }, (trans) => {
+  // Gets foo's myResolve even though foo.bar also has myResolve
+  const fooData = trans.injector('foo').get('myResolve');
+});
+```
+
+**Example - From exiting states**:
+```typescript
+transitionService.onExit({ exiting: 'foo.bar' }, (trans) => {
+  const data = trans.injector(null, 'from').get('myResolve');
+});
+```
+
+### getResolveTokens
+
+Gets all available resolve tokens (keys).
+
+```typescript
+getResolveTokens(pathname?: string): any[]
+```
+
+**Example - Log all resolves**:
+```typescript
+const tokens = trans.getResolveTokens();
+tokens.forEach(token => {
+  console.log(`${token} = ${trans.injector().get(token)}`);
+});
+```
+
+**Example - Fetch all resolves**:
+```typescript
+const tokens = trans.getResolveTokens();
+const promises = tokens.map(token => trans.injector().getAsync(token));
+Promise.all(promises).then(values => {
+  console.log('Resolved values:', values);
+});
+```
+
+### addResolvable
+
+Dynamically adds a resolve to the transition.
+
+```typescript
+addResolvable(
+  resolvable: Resolvable | ResolvableLiteral,
+  state?: StateOrName
+): void
+```
+
+**Parameters**:
+- `resolvable` - Resolvable object or literal
+- `state` - State to scope the resolve to (default: root state)
+
+**Example**:
+```typescript
+transitionService.onBefore({}, (trans) => {
+  trans.addResolvable({
+    token: 'myResolve',
+    deps: ['MyService'],
+    resolveFn: (myService) => myService.getData()
+  });
+});
+```
+
+## Tree Changes
+
+### treeChanges
+
+Gets the tree changes paths for the transition.
+
+```typescript
+treeChanges(pathname: string): PathNode[]
+treeChanges(): TreeChanges
+```
+
+**TreeChanges interface**:
+```typescript
+interface TreeChanges {
+  from: PathNode[];      // Path being transitioned from
+  to: PathNode[];        // Path being transitioned to
+  retained: PathNode[];  // States remaining active
+  exiting: PathNode[];   // States being exited
+  entering: PathNode[];  // States being entered
+}
+```
+
+**Example**:
+```typescript
+const tc = trans.treeChanges();
+console.log(`Entering ${tc.entering.length} states`);
+```
+
+### views
+
+Gets ViewConfig objects for a path.
+
+```typescript
+views(pathname?: string, state?: StateObject): ViewConfig[]
+```
+
+**Parameters**:
+- `pathname` - `'to'`, `'from'`, `'entering'`, `'exiting'`, `'retained'` (default: `'entering'`)
+- `state` - Filter to specific state's views
+
+## Redirect Methods
+
+### redirectedFrom
+
+Gets the transition that was redirected to create this one.
+
+```typescript
+redirectedFrom(): Transition | null
+```
+
+**Example**:
+```typescript
+transitionService.onSuccess({ to: 'B' }, (trans) => {
+  if (trans.redirectedFrom()) {
+    console.log(`Redirected from ${trans.redirectedFrom().to().name}`);
+  }
+});
+```
+
+### originalTransition
+
+Walks redirect chain back to the original transition.
+
+```typescript
+originalTransition(): Transition
+```
+
+**Example** - Multiple redirects:
+```typescript
+// A -> B -> C -> D
+transitionService.onSuccess({ to: 'D' }, (trans) => {
+  trans.to().name; // 'D'
+  trans.redirectedFrom().to().name; // 'C'
+  trans.originalTransition().to().name; // 'A'
+});
+```
+
+## Transition State Methods
+
+### isActive
+
+Checks if this transition is currently running.
+
+```typescript
+isActive(): boolean
+```
+
+### valid
+
+Checks if the transition is valid.
+
+```typescript
+valid(): boolean
+```
+
+Returns `true` unless there's an error and the transition hasn't completed.
+
+### ignored
+
+Checks if the transition is ignored (no changes).
+
+```typescript
+ignored(): boolean
+```
+
+A transition is ignored if no states are entered/exited and no parameters changed.
+
+### dynamic
+
+Checks if the transition is dynamic.
+
+```typescript
+dynamic(): boolean
+```
+
+A transition is dynamic if no states are entered/exited but dynamic parameters changed.
+
+### abort
+
+Aborts the transition imperatively.
+
+```typescript
+abort(): void
+```
+
+**Example**:
+```typescript
+const trans = $state.go('newState');
+setTimeout(() => trans.abort(), 5000);
+```
+
+### error
+
+Gets the transition error/rejection reason.
+
+```typescript
+error(): Rejection
+```
+
+Returns rejection if:
+- Target state is abstract
+- Parameters are invalid
+- Transition failed (`success === false`)
+
+### run
+
+Runs the transition (internal use).
+
+```typescript
+run(): Promise<any>
+```
+
+<Warning>
+This is called internally by StateService. Application code should not call this.
+</Warning>
+
+## Instance Hook Registration
+
+Transitions can have hooks registered on them (before they start running):
+
+```typescript
+transition.onBefore(criteria, callback, options?): Function
+transition.onStart(criteria, callback, options?): Function
+transition.onEnter(criteria, callback, options?): Function
+transition.onExit(criteria, callback, options?): Function
+transition.onRetain(criteria, callback, options?): Function
+transition.onFinish(criteria, callback, options?): Function
+transition.onSuccess(criteria, callback, options?): Function
+transition.onError(criteria, callback, options?): Function
+```
+
+**Example**:
+```typescript
+const trans = $state.go('newState');
+trans.onStart({}, () => {
+  console.log('This specific transition is starting');
+});
+```
+
+## Utility Methods
+
+### options
+
+Gets the transition options.
+
+```typescript
+options(): TransitionOptions
+```
+
+### is
+
+Determines if two transitions are equivalent.
+
+```typescript
+is(compare: Transition | { to?: any; from?: any }): boolean
+```
+
+<Warning>
+Deprecated. Use other comparison methods instead.
+</Warning>
+
+### toString
+
+String representation of the transition.
+
+```typescript
+toString(): string
+```
+
+**Example output**:
+```
+Transition#5( 'home'{} -> 'dashboard'{id: 123} )
+```
+
+## See Also
+
+- [TransitionService](/api/transition-service) - Global transition service
+- [Transition Hooks](/api/transition-hooks) - Hook registration and types

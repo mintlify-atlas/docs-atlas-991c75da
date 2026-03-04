@@ -1,0 +1,546 @@
+---
+title: 'TargetState'
+description: 'Encapsulates the target state, parameters, and options of a transition'
+---
+
+## Overview
+
+The `TargetState` class encapsulates the destination state, parameters, and options of a transition. It is frequently used to redirect transitions to a new destination.
+
+TargetStates are created via `StateService.target()` and are commonly returned from transition hooks to redirect transitions.
+
+## Key Concepts
+
+**Normalization**: TargetState normalizes the different ways to specify a state:
+- State name (string)
+- StateDeclaration object  
+- StateObject instance
+
+**Validation**: A TargetState can be valid (state exists in registry) or invalid (state not registered).
+
+**Immutability**: TargetState instances are immutable. Use `with*` methods to create modified copies.
+
+## Creation
+
+### StateService.target
+
+Create a TargetState using the StateService.
+
+```typescript
+const target = stateService.target('home', { userId: 123 }, { reload: true });
+```
+
+<Note>
+Do not construct TargetState manually using `new TargetState()`. Always use `StateService.target()`.
+</Note>
+
+## Properties Access
+
+### name
+
+Gets the name of the target state.
+
+```typescript
+name(): string
+```
+
+**Return value**: The state name, or the identifier string if state not found.
+
+**Example**:
+```typescript
+const target = stateService.target('users.detail', { userId: 123 });
+console.log(target.name()); // 'users.detail'
+```
+
+### identifier
+
+Gets the identifier used when creating this TargetState.
+
+```typescript
+identifier(): StateOrName
+```
+
+**Return value**: The original identifier (string, StateDeclaration, or StateObject).
+
+**Example**:
+```typescript
+const homeState = stateRegistry.get('home');
+const target = stateService.target(homeState);
+
+console.log(target.identifier()); // homeState object
+console.log(target.name());       // 'home'
+```
+
+### params
+
+Gets the target parameter values.
+
+```typescript
+params(): RawParams
+```
+
+**Return value**: Object containing parameter values.
+
+**Example**:
+```typescript
+const target = stateService.target('users.detail', { 
+  userId: 123, 
+  tab: 'profile' 
+});
+
+const params = target.params();
+console.log(params.userId); // 123
+console.log(params.tab);    // 'profile'
+```
+
+### options
+
+Gets the target options.
+
+```typescript
+options(): TransitionOptions
+```
+
+**Return value**: The transition options object.
+
+**Example**:
+```typescript
+const target = stateService.target('home', {}, { 
+  reload: true,
+  location: 'replace'
+});
+
+const opts = target.options();
+console.log(opts.reload);   // true
+console.log(opts.location); // 'replace'
+```
+
+### state
+
+Gets the internal state declaration.
+
+```typescript
+state(): StateDeclaration
+```
+
+**Return value**: The StateDeclaration if found, `undefined` otherwise.
+
+**Example**:
+```typescript
+const target = stateService.target('home');
+const decl = target.state();
+
+if (decl) {
+  console.log(`URL: ${decl.url}`);
+  console.log(`Abstract: ${decl.abstract}`);
+}
+```
+
+### $state
+
+Gets the internal state object.
+
+```typescript
+$state(): StateObject
+```
+
+**Return value**: The StateObject if found, `undefined` otherwise.
+
+<Warning>
+This returns the internal StateObject API which is subject to change. Use `state()` when possible.
+</Warning>
+
+## Validation Methods
+
+### exists
+
+Checks if the target state was found.
+
+```typescript
+exists(): boolean
+```
+
+**Return value**: `true` if the state exists in the registry.
+
+**Example**:
+```typescript
+const target = stateService.target('admin.users');
+
+if (!target.exists()) {
+  console.error('State not registered');
+}
+```
+
+### valid
+
+Checks if the object is valid.
+
+```typescript
+valid(): boolean
+```
+
+**Return value**: `true` if the target is valid (no error), `false` otherwise.
+
+**Example**:
+```typescript
+const target = stateService.target('nonexistent');
+
+if (target.valid()) {
+  stateService.transitionTo(target.identifier(), target.params());
+} else {
+  console.error('Invalid target:', target.error());
+}
+```
+
+### error
+
+Gets the error message if invalid.
+
+```typescript
+error(): string
+```
+
+**Return value**: Error message describing why the target is invalid, or `undefined` if valid.
+
+**Possible errors**:
+- `"No such state '{name}'"` - State not registered
+- `"Could not resolve '{name}' from state '{from}'"` - Relative resolution failed  
+- `"State '{name}' has an invalid definition"` - State exists but has no `self` property
+
+**Example**:
+```typescript
+const target = stateService.target('.child', {}, { relative: 'nonexistent' });
+
+if (!target.valid()) {
+  console.error(target.error());
+  // "Could not resolve '.child' from state 'nonexistent'"
+}
+```
+
+## Transformation Methods
+
+### withState
+
+Creates a copy targeting a different state.
+
+```typescript
+withState(state: StateOrName): TargetState
+```
+
+**Parameters**:
+- `state` - The new state to target
+
+**Return value**: A new TargetState with the same params and options.
+
+**Example**:
+```typescript
+const original = stateService.target('users.detail', { userId: 123 });
+
+// Redirect to list instead
+const redirected = original.withState('users.list');
+
+console.log(redirected.name());   // 'users.list'
+console.log(redirected.params()); // { userId: 123 }
+```
+
+### withParams
+
+Creates a copy with different parameter values.
+
+```typescript
+withParams(params: RawParams, replace?: boolean): TargetState
+```
+
+**Parameters**:
+- `params` - The new parameter values
+- `replace` - If `true`, replaces all params. If `false` (default), merges with current params
+
+**Return value**: A new TargetState with updated parameters.
+
+**Example - Merge params (default)**:
+```typescript
+const target = stateService.target('users.detail', { 
+  userId: 123, 
+  tab: 'profile' 
+});
+
+const updated = target.withParams({ tab: 'settings' });
+
+console.log(updated.params());
+// { userId: 123, tab: 'settings' }
+```
+
+**Example - Replace params**:
+```typescript
+const target = stateService.target('users.detail', { 
+  userId: 123, 
+  tab: 'profile' 
+});
+
+const replaced = target.withParams({ userId: 456 }, true);
+
+console.log(replaced.params());
+// { userId: 456 }
+// (tab is removed)
+```
+
+### withOptions
+
+Creates a copy with different transition options.
+
+```typescript
+withOptions(options: TransitionOptions, replace?: boolean): TargetState
+```
+
+**Parameters**:
+- `options` - The new transition options
+- `replace` - If `true`, replaces all options. If `false` (default), merges with current options
+
+**Return value**: A new TargetState with updated options.
+
+**Example - Merge options (default)**:
+```typescript
+const target = stateService.target('home', {}, { 
+  location: true,
+  inherit: true
+});
+
+const updated = target.withOptions({ reload: true });
+
+console.log(updated.options());
+// { location: true, inherit: true, reload: true }
+```
+
+**Example - Replace options**:
+```typescript
+const target = stateService.target('home', {}, { 
+  location: true,
+  inherit: true
+});
+
+const replaced = target.withOptions({ reload: true }, true);
+
+console.log(replaced.options());
+// { reload: true }
+// (location and inherit are removed)
+```
+
+## Utility Methods
+
+### toString
+
+String representation of the TargetState.
+
+```typescript
+toString(): string
+```
+
+**Return value**: String in format `'{stateName}'{params}'`.
+
+**Example**:
+```typescript
+const target = stateService.target('users.detail', { userId: 123 });
+console.log(target.toString());
+// "'users.detail'{userId: 123}"
+```
+
+## Static Methods
+
+### isDef
+
+Checks if an object is a TargetStateDef.
+
+```typescript
+static isDef(obj: any): obj is TargetStateDef
+```
+
+**Return value**: `true` if the object has a `state` property that is a state or state name.
+
+**TargetStateDef interface**:
+```typescript
+interface TargetStateDef {
+  state: StateOrName;
+  params?: RawParams;
+  options?: TransitionOptions;
+}
+```
+
+**Example**:
+```typescript
+const obj = { state: 'home', params: { id: 1 } };
+
+if (TargetState.isDef(obj)) {
+  const target = stateService.target(obj.state, obj.params, obj.options);
+}
+```
+
+## Usage in Transition Hooks
+
+TargetState is most commonly used in transition hooks to redirect:
+
+### Example - Redirect to login
+
+```typescript
+transitionService.onBefore(
+  { to: 'admin.**' },
+  (trans: Transition) => {
+    const authService = trans.injector().get('AuthService');
+    
+    if (!authService.isAuthenticated()) {
+      // Return TargetState to redirect
+      return trans.router.stateService.target('login', {
+        returnTo: trans.to().name
+      });
+    }
+  }
+);
+```
+
+### Example - Default substate
+
+```typescript
+transitionService.onBefore(
+  { to: 'users' },
+  (trans: Transition) => {
+    // Redirect 'users' to 'users.list'
+    return trans.router.stateService.target('users.list');
+  }
+);
+```
+
+### Example - Conditional redirect
+
+```typescript
+transitionService.onStart(
+  { to: 'checkout' },
+  (trans: Transition) => {
+    const cart = trans.injector().get('ShoppingCart');
+    
+    if (cart.isEmpty()) {
+      return trans.router.stateService.target('products');
+    }
+  }
+);
+```
+
+### Example - Redirect with modified params
+
+```typescript
+transitionService.onBefore(
+  { to: 'search' },
+  (trans: Transition) => {
+    const target = trans.targetState();
+    const params = target.params();
+    
+    // Ensure page param is valid
+    if (!params.page || params.page < 1) {
+      return target.withParams({ page: 1 });
+    }
+  }
+);
+```
+
+## Common Patterns
+
+### Validate and redirect
+
+```typescript
+function validateAndRedirect(trans: Transition) {
+  const target = trans.targetState();
+  
+  // Check if state exists
+  if (!target.exists()) {
+    return stateService.target('404');
+  }
+  
+  // Check if state is valid
+  if (!target.valid()) {
+    console.error(target.error());
+    return stateService.target('error');
+  }
+}
+```
+
+### Preserve parameters when redirecting
+
+```typescript
+transitionService.onBefore({ to: 'old' }, (trans) => {
+  const target = trans.targetState();
+  
+  // Redirect to new state with same params
+  return target
+    .withState('new')
+    .withOptions({ location: 'replace' });
+});
+```
+
+### Add default parameters
+
+```typescript
+transitionService.onBefore({ to: 'search' }, (trans) => {
+  const target = trans.targetState();
+  const params = target.params();
+  
+  // Add defaults if not provided
+  const defaults = {
+    sort: 'name',
+    order: 'asc',
+    page: 1
+  };
+  
+  const mergedParams = { ...defaults, ...params };
+  
+  if (JSON.stringify(params) !== JSON.stringify(mergedParams)) {
+    return target.withParams(mergedParams);
+  }
+});
+```
+
+## Comparison with Other Types
+
+**TargetState vs StateOrName**:
+- `StateOrName` is a union type: `string | StateDeclaration | StateObject`
+- `TargetState` normalizes StateOrName and adds params/options
+- Use StateOrName in APIs, TargetState for transitions
+
+**TargetState vs Transition**:
+- `TargetState` describes the destination (immutable)
+- `Transition` is the active process of changing states (stateful)
+- TargetState is a property of Transition
+
+## TypeScript Types
+
+### TargetStateDef
+
+```typescript
+interface TargetStateDef {
+  state: StateOrName;
+  params?: RawParams;
+  options?: TransitionOptions;
+}
+```
+
+A plain object that can be converted to a TargetState.
+
+### StateOrName
+
+```typescript
+type StateOrName = string | StateDeclaration | StateObject
+```
+
+Accepts a state name, declaration, or object.
+
+### RawParams
+
+```typescript
+type RawParams = { [key: string]: any }
+```
+
+Plain object of parameter values.
+
+## See Also
+
+- [StateService](/api/state-service) - Create TargetState with `target()` method
+- [Transition](/api/transition) - Access TargetState via `targetState()` method
+- [Transition Hooks](/api/transition-hooks) - Use TargetState to redirect transitions
+- [StateDeclaration](/api/state-declaration) - State configuration

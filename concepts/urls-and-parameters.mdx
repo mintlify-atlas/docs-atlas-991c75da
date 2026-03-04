@@ -1,0 +1,649 @@
+---
+title: "URLs and Parameters"
+description: "URL routing, parameter types, path/query/non-URL parameters"
+---
+
+# URLs and Parameters
+
+UI-Router provides sophisticated URL routing with typed parameters, hierarchical composition, and flexible encoding/decoding.
+
+## URL Declaration
+
+URLs are declared on states using the `url` property:
+
+```typescript
+const state = {
+  name: 'users',
+  url: '/users',
+  component: UsersComponent
+};
+```
+
+### Hierarchical URLs
+
+Child state URLs are appended to parent URLs:
+
+```typescript
+const states = [
+  { name: 'app', url: '/app' },
+  { name: 'app.users', url: '/users' },
+  { name: 'app.users.detail', url: '/:userId' }
+];
+
+// Resulting URLs:
+// app              -> /app
+// app.users        -> /app/users
+// app.users.detail -> /app/users/:userId
+```
+
+<Note>
+Child URLs starting with `^` are absolute and don't append to parent:
+
+```typescript
+{ name: 'modal', parent: 'app', url: '^/modal' }
+// URL is /modal (not /app/modal)
+```
+</Note>
+
+## URL Parameters
+
+### Path Parameters
+
+Path parameters use `:paramName` syntax:
+
+```typescript
+const state = {
+  name: 'user',
+  url: '/users/:userId',
+  // Matches: /users/123, /users/abc
+};
+
+// Navigate
+$state.go('user', { userId: 123 });
+// URL: /users/123
+```
+
+### Query Parameters
+
+Query parameters use `?paramName` syntax:
+
+```typescript
+const state = {
+  name: 'search',
+  url: '/search?query&category&page',
+  // Matches: /search?query=test&category=books&page=2
+};
+
+// Navigate
+$state.go('search', { query: 'test', category: 'books', page: 2 });
+// URL: /search?query=test&category=books&page=2
+```
+
+### Mixed Parameters
+
+```typescript
+const state = {
+  name: 'products',
+  url: '/products/:categoryId?sort&page',
+  // Matches: /products/electronics?sort=price&page=1
+};
+```
+
+## Parameter Types
+
+From [`ParamDeclaration`](/api/param-declaration):
+
+```typescript
+export interface ParamDeclaration {
+  /** The parameter's type */
+  type?: string | ParamType;
+  
+  /** Default value */
+  value?: any;
+  
+  /** Array mode */
+  array?: boolean;
+  
+  /** Squash default values */
+  squash?: boolean | string;
+  
+  /** Dynamic parameter */
+  dynamic?: boolean;
+  
+  /** Raw (no URL encoding) */
+  raw?: boolean;
+  
+  /** Inherit parameter value */
+  inherit?: boolean;
+}
+```
+
+### Built-in Types
+
+UI-Router includes several built-in parameter types:
+
+<Tabs>
+  <Tab title="string">
+    Default type for path parameters.
+    
+    ```typescript
+    url: '/users/:name'
+    // name is type 'string'
+    ```
+  </Tab>
+  
+  <Tab title="int">
+    Integer values.
+    
+    ```typescript
+    url: '/users/{userId:int}'
+    params: {
+      userId: { type: 'int' }
+    }
+    
+    $state.go('users', { userId: 123 });
+    // params.userId === 123 (number)
+    ```
+  </Tab>
+  
+  <Tab title="bool">
+    Boolean values.
+    
+    ```typescript
+    url: '/list?{active:bool}'
+    
+    $state.go('list', { active: true });
+    // URL: /list?active=true
+    ```
+  </Tab>
+  
+  <Tab title="date">
+    Date values (ISO 8601 format).
+    
+    ```typescript
+    url: '/events?{from:date}&{to:date}'
+    
+    $state.go('events', { 
+      from: new Date('2024-01-01'),
+      to: new Date('2024-12-31')
+    });
+    // URL: /events?from=2024-01-01&to=2024-12-31
+    ```
+  </Tab>
+  
+  <Tab title="json">
+    JSON-encoded objects.
+    
+    ```typescript
+    url: '/search?{filters:json}'
+    
+    $state.go('search', { 
+      filters: { category: 'books', minPrice: 10 }
+    });
+    // URL: /search?filters=%7B%22category%22:%22books%22,%22minPrice%22:10%7D
+    ```
+  </Tab>
+  
+  <Tab title="any">
+    Default for non-URL parameters.
+    
+    ```typescript
+    params: {
+      stateData: { value: null, type: 'any' }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Custom Parameter Types
+
+From [`ParamTypeDefinition`](/api/param-types):
+
+```typescript
+export interface ParamTypeDefinition {
+  /** Pattern to match in URL */
+  pattern?: RegExp;
+  
+  /** Type check */
+  is(val: any, key?: string): boolean;
+  
+  /** Encode value to string */
+  encode(val: any, key?: string): string | string[];
+  
+  /** Decode string to value */
+  decode(val: string, key?: string): any;
+  
+  /** Check equality */
+  equals(a: any, b: any): boolean;
+  
+  /** Configuration */
+  raw?: boolean;
+  dynamic?: boolean;
+  inherit?: boolean;
+}
+```
+
+#### Example: Custom Type
+
+```typescript
+// Register custom type
+router.urlService.config.type('csv', {
+  // Encode array as CSV string
+  encode: (array) => array ? array.join(',') : '',
+  
+  // Decode CSV string to array
+  decode: (str) => str ? str.split(',') : [],
+  
+  // Pattern matches comma-separated values
+  pattern: /^[^,]+(,[^,]+)*$/,
+  
+  // Check if value is array
+  is: (val) => Array.isArray(val),
+  
+  // Check array equality
+  equals: (a, b) => a && b && a.length === b.length && 
+    a.every((val, i) => val === b[i])
+});
+
+// Use custom type
+const state = {
+  name: 'tags',
+  url: '/tags/{tags:csv}',
+};
+
+$state.go('tags', { tags: ['javascript', 'typescript', 'angular'] });
+// URL: /tags/javascript,typescript,angular
+```
+
+## Parameter Configuration
+
+### Default Values
+
+```typescript
+const state = {
+  name: 'list',
+  url: '/list?page&size',
+  params: {
+    page: { value: 1, type: 'int' },
+    size: { value: 20, type: 'int' }
+  }
+};
+
+// Navigate without params
+$state.go('list');
+// Uses defaults: { page: 1, size: 20 }
+```
+
+### Shorthand Syntax
+
+```typescript
+// Full syntax
+params: {
+  page: { value: 1 }
+}
+
+// Shorthand
+params: {
+  page: 1
+}
+```
+
+### Array Parameters
+
+From `ParamDeclaration.array`:
+
+```typescript
+const state = {
+  name: 'search',
+  url: '/search?{tags:int}',
+  params: {
+    tags: { 
+      array: true,
+      value: []
+    }
+  }
+};
+
+$state.go('search', { tags: [1, 2, 3] });
+// URL: /search?tags=1&tags=2&tags=3
+```
+
+<Note>
+For query parameters, `array: 'auto'` allows single or multiple values:
+
+```typescript
+params: {
+  tags: { array: 'auto' }
+}
+
+// Single value: /search?tags=1  -> tags = '1'
+// Multiple: /search?tags=1&tags=2  -> tags = ['1', '2']
+```
+</Note>
+
+### Squash Parameters
+
+From `ParamDeclaration.squash`:
+
+Control how default values appear in URLs:
+
+```typescript
+const state = {
+  name: 'list',
+  url: '/list/:category',
+  params: {
+    category: { 
+      value: 'all',
+      squash: true  // Omit default from URL
+    }
+  }
+};
+
+$state.go('list', { category: 'all' });
+// URL: /list (category omitted)
+
+$state.go('list', { category: 'books' });
+// URL: /list/books
+```
+
+With custom squash string:
+
+```typescript
+params: {
+  category: {
+    value: 'all',
+    squash: '~'  // Replace default with '~'
+  }
+}
+
+$state.go('list', { category: 'all' });
+// URL: /list/~
+```
+
+### Dynamic Parameters
+
+From `ParamDeclaration.dynamic`:
+
+Dynamic parameters don't trigger state reload:
+
+```typescript
+const state = {
+  name: 'search',
+  url: '/search?query&page',
+  params: {
+    query: { dynamic: true },
+    page: { dynamic: true, value: 1 }
+  },
+  component: SearchComponent
+};
+
+// Component doesn't reload
+$state.go('search', { query: 'new search' });
+// Only parameters change, component stays mounted
+```
+
+### Raw Parameters
+
+From `ParamDeclaration.raw`:
+
+Disable URL encoding:
+
+```typescript
+const state = {
+  name: 'product',
+  url: '/product/:slug',
+  params: {
+    slug: { 
+      type: 'string',
+      raw: true  // Don't encode slashes
+    }
+  }
+};
+
+$state.go('product', { slug: 'electronics/phones/iphone' });
+// URL: /product/electronics/phones/iphone
+// (not /product/electronics%2Fphones%2Fiphone)
+```
+
+<Warning>
+Be careful with raw parameters as they can create ambiguous URLs.
+</Warning>
+
+## Non-URL Parameters
+
+Parameters can exist without being in the URL:
+
+```typescript
+const state = {
+  name: 'detail',
+  url: '/detail/:id',
+  params: {
+    id: null,           // URL parameter
+    returnTo: null,     // Non-URL parameter
+    openModal: false    // Non-URL parameter
+  }
+};
+
+$state.go('detail', { 
+  id: 123,
+  returnTo: 'list',
+  openModal: true 
+});
+// URL: /detail/123
+// returnTo and openModal are in params but not URL
+```
+
+## URL Service
+
+The [`UrlService`](/api/url-service) manages URL synchronization:
+
+### URL Synchronization
+
+```typescript
+// Start listening to URL changes
+router.urlService.listen();
+
+// Trigger initial URL sync
+router.urlService.sync();
+
+// Defer URL interception during setup
+router.urlService.deferIntercept();
+// ... register states ...
+router.urlService.listen();
+```
+
+### Generate URLs
+
+```typescript
+// Generate URL for state
+const url = $state.href('users.detail', { userId: 123 });
+// Returns: '/users/123'
+
+// Absolute URL
+const absUrl = $state.href('users', {}, { absolute: true });
+// Returns: 'http://example.com/users'
+```
+
+## URL Rules
+
+URL rules provide advanced routing:
+
+```typescript
+// When rule
+router.urlService.rules.when('/old-url', '/new-url');
+
+// Otherwise (fallback)
+router.urlService.rules.otherwise('/home');
+
+// Initial rule (runs once)
+router.urlService.rules.initial({ state: 'home' });
+
+// Custom rule
+router.urlService.rules.rule({
+  match: (url) => {
+    return url.path === '/special';
+  },
+  handler: (match, url, router) => {
+    return router.stateService.target('special');
+  }
+});
+```
+
+## URL Matching
+
+From [`UrlMatcher`](/api/url-matcher):
+
+URLs are matched using compiled patterns:
+
+```typescript
+const state = {
+  name: 'users',
+  url: '/users/{userId:int}?{page:int}&search',
+};
+
+// The URL is compiled to a UrlMatcher
+// Matches: /users/123?page=1&search=john
+// Extracts: { userId: 123, page: 1, search: 'john' }
+```
+
+### Pattern Matching
+
+```typescript
+// Exact match
+url: '/users'
+
+// Parameter
+url: '/users/:id'
+
+// Typed parameter
+url: '/users/{id:int}'
+
+// Optional parameter (with ?)
+url: '/users/:id?'
+
+// Regex constraint
+url: '/users/{id:[0-9]{1,8}}'
+
+// Query parameters
+url: '/search?query&category'
+
+// Typed query parameters
+url: '/search?{query}&{page:int}'
+```
+
+## Parameter Inheritance
+
+Parameters are inherited during transitions:
+
+```typescript
+const states = [
+  {
+    name: 'users',
+    url: '/users?sort',
+    params: { sort: 'name' }
+  },
+  {
+    name: 'users.detail',
+    url: '/:userId'
+  }
+];
+
+// Navigate to users
+$state.go('users', { sort: 'date' });
+
+// Navigate to detail (inherits sort)
+$state.go('users.detail', { userId: 123 });
+// Parameters: { sort: 'date', userId: 123 }
+```
+
+Disable inheritance:
+
+```typescript
+$state.go('users.detail', { userId: 456 }, { inherit: false });
+// Parameters: { userId: 456 } (sort not inherited)
+```
+
+Or at the parameter level:
+
+```typescript
+params: {
+  tempFlag: { 
+    value: false,
+    inherit: false  // Never inherited
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use typed parameters">
+    ```typescript
+    // Good: Type ensures validation
+    url: '/users/{userId:int}'
+    
+    // Avoid: No type validation
+    url: '/users/:userId'
+    ```
+  </Accordion>
+  
+  <Accordion title="Use dynamic params for UI state">
+    ```typescript
+    params: {
+      sortBy: { dynamic: true },
+      page: { dynamic: true },
+      selectedTab: { dynamic: true }
+    }
+    // These changes don't reload the component
+    ```
+  </Accordion>
+  
+  <Accordion title="Provide sensible defaults">
+    ```typescript
+    params: {
+      page: { value: 1, type: 'int' },
+      size: { value: 20, type: 'int' }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Use squash for optional segments">
+    ```typescript
+    url: '/list/:filter',
+    params: {
+      filter: { value: 'all', squash: true }
+    }
+    // /list instead of /list/all
+    ```
+  </Accordion>
+  
+  <Accordion title="Keep URLs clean and semantic">
+    ```typescript
+    // Good
+    url: '/products/:category/:productId'
+    
+    // Avoid
+    url: '/p?c&id'
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="States" icon="circle-nodes" href="/concepts/states">
+    Learn about state declarations
+  </Card>
+  
+  <Card title="Transitions" icon="arrows-turn-right" href="/concepts/transitions">
+    Navigate with parameters
+  </Card>
+  
+  <Card title="State Tree" icon="folder-tree" href="/concepts/state-tree">
+    Understand URL composition
+  </Card>
+  
+  <Card title="Views" icon="eye" href="/concepts/views">
+    Use parameters in views
+  </Card>
+</CardGroup>

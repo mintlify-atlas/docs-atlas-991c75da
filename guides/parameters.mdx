@@ -1,0 +1,634 @@
+---
+title: Parameters
+description: Complete guide to working with state parameters, parameter types, and encoding/decoding in UI-Router Core
+---
+
+# Parameters
+
+Parameters allow you to pass data to states via the URL or as non-URL state data. This guide covers parameter configuration, types, and usage patterns.
+
+## Parameter Basics
+
+Parameters can be defined in the URL or as non-URL parameters:
+
+```typescript
+{
+  name: 'user',
+  url: '/users/:userId?{tab:string}',  // URL parameters
+  params: {
+    userId: { type: 'int' },          // Path parameter config
+    tab: { value: 'profile' },        // Query parameter config
+    metadata: { value: {} }           // Non-URL parameter
+  }
+}
+```
+
+## URL Parameters
+
+### Path Parameters
+
+Path parameters are part of the URL path:
+
+```typescript
+// Colon syntax
+url: '/users/:userId'
+// Matches: /users/123, /users/abc
+
+// Curly brace syntax
+url: '/users/{userId}'
+// Matches: /users/123, /users/abc
+
+// Multiple path parameters
+url: '/posts/:categoryId/:postId'
+// Matches: /posts/tech/123
+```
+
+### Query Parameters
+
+Query parameters appear after `?` in the URL:
+
+```typescript
+// Simple query params
+url: '/search?query&page'
+// Matches: /search?query=hello&page=2
+
+// Typed query params
+url: '/search?{query:string}&{page:int}'
+// query is string, page is integer
+
+// Optional query params
+url: '/articles?category&author&{year:int}'
+// All are optional: /articles or /articles?category=tech&year=2023
+```
+
+## Parameter Types
+
+UI-Router includes built-in parameter types and supports custom types.
+
+### Built-in Types
+
+```typescript
+// string (default)
+url: '/users/{name:string}'
+// Decodes to: "john"
+
+// int
+url: '/posts/{id:int}'
+// Decodes to: 123 (number)
+
+// bool
+url: '/settings?{enabled:bool}'
+// Decodes to: true (boolean)
+
+// date
+url: '/events/{start:date}'
+// Decodes to: Date object
+
+// json
+url: '/state?{config:json}'
+// Decodes to: { key: "value" }
+
+// path (for catch-all)
+url: '/files/{path:path}'
+// Matches: /files/folder/subfolder/file.txt
+```
+
+### Type Declaration
+
+Declare types in URL or params:
+
+```typescript
+// In URL
+{
+  url: '/products/{id:int}?{sort:string}'
+}
+
+// In params block
+{
+  url: '/products/:id?sort',
+  params: {
+    id: { type: 'int' },
+    sort: { type: 'string' }
+  }
+}
+```
+
+## Parameter Configuration
+
+The `params` object provides detailed parameter configuration:
+
+### Default Values
+
+```typescript
+params: {
+  // Shorthand - just set default value
+  page: 1,
+  
+  // Full syntax
+  sortBy: {
+    value: 'date',  // Default value
+  },
+  
+  // Dynamic default from function
+  timestamp: {
+    value: () => Date.now()
+  },
+  
+  // undefined means no default (parameter is required)
+  userId: {
+    value: undefined
+  },
+  
+  // null is a valid default value
+  filter: {
+    value: null
+  }
+}
+```
+
+### Array Parameters
+
+```typescript
+params: {
+  // Always treat as array
+  tags: {
+    array: true,
+    value: []
+  },
+  
+  // Auto mode - array if multiple values, single if one value
+  categories: {
+    array: 'auto'  // Only for query params
+  }
+}
+
+// Usage:
+// /search?tags=javascript&tags=typescript
+// params.tags = ['javascript', 'typescript']
+
+// /search?tags=javascript
+// params.tags (array: true) = ['javascript']
+// params.tags (array: 'auto') = 'javascript' (single value)
+```
+
+### Squash - Omit Default Values
+
+Control how default values appear in URLs:
+
+```typescript
+params: {
+  // Don't squash - always show in URL
+  page: {
+    value: 1,
+    squash: false
+  },
+  // URL: /articles?page=1
+  
+  // Squash - omit from URL when default
+  sort: {
+    value: 'date',
+    squash: true
+  },
+  // URL: /articles (when sort is 'date')
+  // URL: /articles?sort=name (when sort is 'name')
+  
+  // Replace with custom string
+  view: {
+    value: 'grid',
+    squash: '~'
+  }
+  // URL: /articles/~ (when view is 'grid')
+  // URL: /articles/list (when view is 'list')
+}
+```
+
+### Dynamic Parameters
+
+Dynamic parameters don't cause state reload when changed:
+
+```typescript
+{
+  name: 'search',
+  url: '/search?query&page&sort',
+  params: {
+    query: { dynamic: false },  // Reload state when changed
+    page: { dynamic: true },    // Don't reload state
+    sort: { dynamic: true }     // Don't reload state
+  }
+}
+
+// Change page without reloading state
+stateService.go('.', { page: 2 }, { inherit: true });
+// State not reloaded, component can react to param change
+```
+
+Mark all parameters as dynamic:
+
+```typescript
+{
+  name: 'search',
+  url: '/search?query&filters&page',
+  dynamic: true  // All params are dynamic
+}
+```
+
+### Raw Parameters
+
+Disable URL encoding:
+
+```typescript
+params: {
+  slug: {
+    type: 'string',
+    raw: true  // Don't encode/decode
+  }
+}
+
+// Allows: /products/camping/tents/awesome-tent
+// Instead of: /products/camping%2Ftents%2Fawesome-tent
+```
+
+### Inherit - Parameter Inheritance
+
+Control parameter inheritance:
+
+```typescript
+params: {
+  userId: {
+    inherit: true  // Inherit from current params (default)
+  },
+  
+  refresh: {
+    inherit: false  // Never inherit
+  }
+}
+
+// Current params: { userId: 123, refresh: true }
+stateService.go('user.edit', {}, { inherit: true });
+// New params: { userId: 123, refresh: undefined }
+```
+
+## Non-URL Parameters
+
+Define parameters that don't appear in the URL:
+
+```typescript
+{
+  name: 'modal',
+  params: {
+    // Non-URL parameter - only in params object
+    returnTo: {
+      value: null
+    },
+    
+    metadata: {
+      value: {},
+      type: 'json'
+    },
+    
+    options: {
+      value: [],
+      array: true
+    }
+  }
+}
+
+// Pass non-URL params
+stateService.go('modal', {
+  returnTo: 'dashboard',
+  metadata: { action: 'create' },
+  options: ['opt1', 'opt2']
+});
+
+// Access in state
+transition.params().returnTo;  // 'dashboard'
+```
+
+## Custom Parameter Types
+
+Define custom parameter types for encoding/decoding:
+
+### Registering Custom Types
+
+```typescript
+import { UrlMatcherFactory } from '@uirouter/core';
+
+const urlMatcherFactory = router.urlMatcherFactory;
+
+// Define custom type
+urlMatcherFactory.type('customtype', {
+  // Encode for URL
+  encode: (value) => {
+    return value.toString();
+  },
+  
+  // Decode from URL
+  decode: (str) => {
+    return parseInt(str, 10);
+  },
+  
+  // Validate decoded value
+  is: (value) => {
+    return typeof value === 'number' && value > 0;
+  },
+  
+  // Compare values
+  equals: (a, b) => {
+    return a === b;
+  },
+  
+  // URL pattern
+  pattern: /[0-9]+/
+});
+```
+
+### Example: Integer Array Type
+
+```typescript
+urlMatcherFactory.type('intarray', {
+  // Encode array to string: [1,2,3] -> "1-2-3"
+  encode: (array) => {
+    return array ? array.join('-') : '';
+  },
+  
+  // Decode string to array: "1-2-3" -> [1,2,3]
+  decode: (str) => {
+    return str ? str.split('-').map(x => parseInt(x, 10)) : [];
+  },
+  
+  // Validate it's an array of integers
+  is: (value) => {
+    return Array.isArray(value) && 
+      value.every(x => typeof x === 'number');
+  },
+  
+  // Compare arrays
+  equals: (a, b) => {
+    return a.length === b.length && 
+      a.every((val, idx) => val === b[idx]);
+  },
+  
+  // Match pattern in URL
+  pattern: /[0-9]+(?:-[0-9]+)*/
+});
+
+// Use in state
+{
+  name: 'products',
+  url: '/products/{ids:intarray}',
+  // /products/1-2-3 -> params.ids = [1, 2, 3]
+}
+```
+
+### Example: Date Range Type
+
+```typescript
+urlMatcherFactory.type('daterange', {
+  encode: (range) => {
+    if (!range) return '';
+    const start = range.start.toISOString().split('T')[0];
+    const end = range.end.toISOString().split('T')[0];
+    return `${start}_${end}`;
+  },
+  
+  decode: (str) => {
+    if (!str) return null;
+    const [start, end] = str.split('_');
+    return {
+      start: new Date(start),
+      end: new Date(end)
+    };
+  },
+  
+  is: (value) => {
+    return value && value.start instanceof Date && 
+      value.end instanceof Date;
+  },
+  
+  equals: (a, b) => {
+    return a.start.getTime() === b.start.getTime() &&
+      a.end.getTime() === b.end.getTime();
+  },
+  
+  pattern: /[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{4}-[0-9]{2}-[0-9]{2}/
+});
+
+// Usage
+{
+  url: '/reports?{period:daterange}'
+}
+// /reports?period=2023-01-01_2023-12-31
+```
+
+## Accessing Parameters
+
+### In Transition Hooks
+
+```typescript
+transitionService.onStart({}, (transition) => {
+  const params = transition.params();
+  console.log(params.userId);  // Access parameter
+  
+  // Access specific param
+  const userId = transition.params('userId');
+  
+  // Get 'to' state params
+  const toParams = transition.params('to');
+  
+  // Get 'from' state params
+  const fromParams = transition.params('from');
+});
+```
+
+### In Resolves
+
+```typescript
+{
+  resolve: {
+    user: ($transition$) => {
+      const userId = $transition$.params().userId;
+      return UserService.getUser(userId);
+    }
+  }
+}
+```
+
+### Via StateService
+
+```typescript
+// Get current params
+const params = stateService.params;
+console.log(params.userId);
+
+// Get specific param
+const userId = stateService.params.userId;
+```
+
+## Parameter Validation
+
+Validate parameters during transitions:
+
+```typescript
+transitionService.onBefore({}, (transition) => {
+  const params = transition.params();
+  
+  // Validate userId is a number
+  if (params.userId && isNaN(params.userId)) {
+    return router.stateService.target('error', {
+      message: 'Invalid user ID'
+    });
+  }
+});
+```
+
+## Common Patterns
+
+### Pagination Parameters
+
+```typescript
+{
+  name: 'list',
+  url: '/list?{page:int}&{pageSize:int}',
+  params: {
+    page: {
+      value: 1,
+      squash: true,
+      dynamic: true
+    },
+    pageSize: {
+      value: 20,
+      squash: true,
+      dynamic: true
+    }
+  }
+}
+```
+
+### Search/Filter Parameters
+
+```typescript
+{
+  name: 'search',
+  url: '/search?query&{tags:json}&{filters:json}',
+  params: {
+    query: {
+      value: '',
+      dynamic: true
+    },
+    tags: {
+      value: [],
+      array: true,
+      dynamic: true
+    },
+    filters: {
+      value: {},
+      dynamic: true
+    }
+  }
+}
+```
+
+### Tab Navigation
+
+```typescript
+{
+  name: 'dashboard',
+  url: '/dashboard?{tab:string}',
+  params: {
+    tab: {
+      value: 'overview',
+      squash: true,
+      dynamic: true
+    }
+  }
+}
+```
+
+### Modal State with Return
+
+```typescript
+{
+  name: 'modal',
+  params: {
+    returnTo: { value: null },     // Non-URL param
+    returnParams: { value: {} }    // Non-URL param
+  }
+}
+
+// Open modal with return information
+stateService.go('modal', {
+  returnTo: stateService.current.name,
+  returnParams: stateService.params
+});
+
+// Return to previous state
+const params = stateService.params;
+stateService.go(params.returnTo, params.returnParams);
+```
+
+## Best Practices
+
+<Steps>
+
+### Use typed parameters
+
+```typescript
+// Good - explicit type
+url: '/posts/{id:int}'
+
+// Avoid - string by default
+url: '/posts/:id'
+```
+
+### Set sensible defaults
+
+```typescript
+params: {
+  page: { value: 1 },
+  sortBy: { value: 'date' },
+  sortDir: { value: 'desc' }
+}
+```
+
+### Use dynamic for UI-only params
+
+```typescript
+params: {
+  page: { dynamic: true },      // Don't reload on page change
+  selectedId: { dynamic: true }  // Don't reload on selection
+}
+```
+
+### Squash default values
+
+```typescript
+params: {
+  view: {
+    value: 'grid',
+    squash: true  // Clean URLs
+  }
+}
+```
+
+### Use non-URL params for temporary data
+
+```typescript
+params: {
+  highlightId: { value: null },  // Doesn't affect URL
+  scrollPosition: { value: 0 }   // Doesn't affect URL
+}
+```
+
+</Steps>
+
+## Related Documentation
+
+- [State Configuration](/guides/state-configuration) - Define parameters in states
+- [Navigation](/guides/navigation) - Pass parameters when navigating
+- [URL Routing](/guides/url-routing) - URL parameter patterns
+
+## API Reference
+
+- [ParamDeclaration](/api/param-declaration) - Parameter configuration interface
+- [ParamTypes](/api/param-types) - Parameter type implementation
+- [Param](/api/param) - Parameter class (internal)

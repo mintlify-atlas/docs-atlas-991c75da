@@ -1,0 +1,520 @@
+---
+title: 'StateObject'
+description: 'Internal representation of a UI-Router state'
+---
+
+## Overview
+
+The `StateObject` class is the internal representation of a state in UI-Router. Instances are created when a `StateDeclaration` is registered with the `StateRegistry`.
+
+A registered `StateDeclaration` is augmented with a `$$state()` getter that returns the corresponding `StateObject`.
+
+<Warning>
+This is an internal API. The StateObject structure may change without notice. Most application code should use StateDeclaration and StateService APIs instead.
+</Warning>
+
+## Key Concepts
+
+**Prototype chain**:
+StateObject prototypally inherits from its StateDeclaration. Each StateObject property is built using builders from the StateBuilder.
+
+**Creation**:
+StateObjects are created via `StateObject.create()` when states are registered.
+
+## Properties
+
+### name
+
+The name used to register the state.
+
+```typescript
+name: string
+```
+
+### parent
+
+The parent StateObject.
+
+```typescript
+parent: StateObject
+```
+
+References the parent state in the hierarchy. The root state has no parent.
+
+### abstract
+
+Abstract state indicator.
+
+```typescript
+abstract: boolean
+```
+
+Prototypally inherits from `StateDeclaration.abstract`.
+
+### url
+
+Compiled URLMatcher.
+
+```typescript
+url: UrlMatcher
+```
+
+The compiled URLMatcher which detects when the state's URL is matched.
+
+### params
+
+State parameters.
+
+```typescript
+params: { [key: string]: Param }
+```
+
+The parameters for the state, built from the URL and `StateDeclaration.params`.
+
+### resolve
+
+Resolve configuration.
+
+```typescript
+resolve: { [key: string]: string | any[] | Function } | any[]
+```
+
+Prototypally inherits from `StateDeclaration.resolve`.
+
+### resolvables
+
+Internal representation of resolves.
+
+```typescript
+resolvables: Resolvable[]
+```
+
+A list of Resolvable objects (the internal representation of `resolve`).
+
+### resolvePolicy
+
+Resolve policy configuration.
+
+```typescript
+resolvePolicy: any
+```
+
+Prototypally inherits from `StateDeclaration.resolvePolicy`.
+
+### views
+
+View configurations.
+
+```typescript
+views: { [key: string]: _ViewDeclaration }
+```
+
+<Note>
+@uirouter/core does not register a builder for views. The framework-specific code should register a `views` builder.
+</Note>
+
+### data
+
+Inherited state data.
+
+```typescript
+data: any
+```
+
+Prototypally inherits from `StateDeclaration.data`. This is the only field on StateDeclaration that is mutated - the definition object's `data` field is replaced with a new object that prototypally inherits from the parent state definition's `data` field.
+
+### navigable
+
+Nearest parent state with a URL.
+
+```typescript
+navigable: StateObject
+```
+
+The nearest parent StateObject which has a URL. May be the state itself.
+
+### path
+
+Path to root.
+
+```typescript
+path: StateObject[]
+```
+
+The parent StateObject objects from this state up to the root.
+
+### includes
+
+Parent state lookup.
+
+```typescript
+includes: { [name: string]: boolean }
+```
+
+An object containing the parent states' names as keys and `true` as their values. Used for quick parent state lookups.
+
+### self
+
+Original StateDeclaration.
+
+```typescript
+self: StateDeclaration
+```
+
+The original StateDeclaration used to build this StateObject.
+
+<Note>
+The StateObject also prototypally inherits from the `self` declaration object.
+</Note>
+
+## Lifecycle Hook Properties
+
+### onEnter
+
+On enter hook.
+
+```typescript
+onEnter: TransitionStateHookFn
+```
+
+Prototypally inherits from `StateDeclaration.onEnter`.
+
+### onExit
+
+On exit hook.
+
+```typescript
+onExit: TransitionStateHookFn
+```
+
+Prototypally inherits from `StateDeclaration.onExit`.
+
+### onRetain
+
+On retain hook.
+
+```typescript
+onRetain: TransitionStateHookFn
+```
+
+Prototypally inherits from `StateDeclaration.onRetain`.
+
+## Redirect and Lazy Load
+
+### redirectTo
+
+Redirect configuration.
+
+```typescript
+redirectTo: 
+  | string 
+  | (($transition$: Transition) => TargetState)
+  | { state: string | StateDeclaration; params: { [key: string]: any } }
+```
+
+Prototypally inherits from `StateDeclaration.redirectTo`.
+
+### lazyLoad
+
+Lazy load function.
+
+```typescript
+lazyLoad: (
+  transition: Transition, 
+  state: StateDeclaration
+) => Promise<LazyLoadResult>
+```
+
+Prototypally inherits from `StateDeclaration.lazyLoad`.
+
+## Static Methods
+
+### create
+
+Creates a StateObject from a StateDeclaration.
+
+```typescript
+static create(stateDecl: StateDeclaration): StateObject
+```
+
+**Parameters**:
+- `stateDecl` - The user-supplied StateDeclaration or state class
+
+**Return value**: An internal StateObject.
+
+**Behavior**:
+- If `stateDecl` is a class with `@State()` decorator, instantiates it
+- Creates prototype chain: StateObject -> StateObject.prototype -> StateDeclaration
+- Adds `$$state()` getter to the declaration
+- Initializes internal cache
+
+### isStateClass
+
+Predicate for state classes.
+
+```typescript
+static isStateClass(
+  stateDecl: StateDeclaration
+): stateDecl is { new(): StateDeclaration }
+```
+
+**Return value**: `true` if the object is a class with `@State()` decorator.
+
+### isStateDeclaration
+
+Predicate for state declarations.
+
+```typescript
+static isStateDeclaration(obj: any): obj is StateDeclaration
+```
+
+**Return value**: `true` if the object is a StateDeclaration (has `$$state` function).
+
+### isState
+
+Predicate for state objects.
+
+```typescript
+static isState(obj: any): obj is StateObject
+```
+
+**Return value**: `true` if the object is an internal StateObject.
+
+## Instance Methods
+
+### is
+
+Checks if this state matches a reference.
+
+```typescript
+is(ref: StateObject | StateDeclaration | string): boolean
+```
+
+**Parameters**:
+- `ref` - Can be a StateObject instance, StateDeclaration object, or fully-qualified name
+
+**Return value**: `true` if `ref` matches the current StateObject instance.
+
+**Example**:
+```typescript
+const state = stateRegistry.get('home').$$state();
+
+state.is(state);                // true
+state.is(homeStateDeclaration); // true
+state.is('home');               // true
+state.is('about');              // false
+```
+
+### fqn
+
+Returns the fully-qualified name.
+
+```typescript
+fqn(): string
+```
+
+**Return value**: Dot-separated name of the state.
+
+<Warning>
+Deprecated. This does not properly handle dot notation. Use the `name` property instead.
+</Warning>
+
+### root
+
+Returns the root of this state's tree.
+
+```typescript
+root(): StateObject
+```
+
+**Return value**: The root StateObject.
+
+**Example**:
+```typescript
+const state = stateRegistry.get('users.detail').$$state();
+const root = state.root();
+console.log(root.name); // '' (empty string)
+```
+
+### parameters
+
+Gets the state's Param objects.
+
+```typescript
+parameters(opts?: { 
+  inherit?: boolean; 
+  matchingKeys?: any 
+}): Param[]
+```
+
+**Parameters**:
+- `opts.inherit` - If `true`, includes ancestor states' Params (default: `true`)
+- `opts.matchingKeys` - If provided, returns only Params whose `id` is a key on this object
+
+**Return value**: Array of Param objects.
+
+**Example - Get all parameters**:
+```typescript
+const state = stateRegistry.get('users.detail').$$state();
+const params = state.parameters();
+params.forEach(p => console.log(p.id));
+```
+
+**Example - Only own parameters**:
+```typescript
+const ownParams = state.parameters({ inherit: false });
+```
+
+**Example - Matching keys**:
+```typescript
+const changed = state.parameters({ 
+  matchingKeys: { userId: true, tab: true } 
+});
+```
+
+### parameter
+
+Returns a single Param.
+
+```typescript
+parameter(
+  id: string, 
+  opts?: { inherit?: boolean }
+): Param
+```
+
+**Parameters**:
+- `id` - The name of the parameter
+- `opts.inherit` - If `true`, searches ancestor states (default: `false`)
+
+**Return value**: The Param object, or `undefined` if not found.
+
+**Example**:
+```typescript
+const state = stateRegistry.get('users.detail').$$state();
+const userIdParam = state.parameter('userId');
+
+if (userIdParam) {
+  console.log(`Type: ${userIdParam.type.name}`);
+  console.log(`Default: ${userIdParam.value()}`);
+}
+```
+
+### toString
+
+String representation.
+
+```typescript
+toString(): string
+```
+
+**Return value**: The fully-qualified state name.
+
+## Internal Properties
+
+### __stateObjectCache
+
+Internal cache object.
+
+```typescript
+__stateObjectCache: {
+  nameGlob?: Glob;
+}
+```
+
+Caches computed values for performance. Currently stores the name glob (may be null).
+
+## Construction
+
+### constructor
+
+Constructs a StateObject.
+
+```typescript
+constructor(config?: StateDeclaration)
+```
+
+<Warning>
+Deprecated. Use `StateObject.create()` instead.
+</Warning>
+
+## State Building Process
+
+When a state is registered:
+
+1. **StateQueueManager** receives the StateDeclaration
+2. **StateObject.create()** creates the StateObject
+3. **StateBuilder** runs builder functions to populate properties:
+   - `name` builder - sets the name
+   - `parent` builder - finds and sets the parent
+   - `url` builder - compiles the URL into a UrlMatcher
+   - `params` builder - builds Param objects
+   - `views` builder - processes view configuration
+   - `resolve` builder - converts resolve config to Resolvables
+   - `data` builder - sets up prototypal inheritance
+   - `path` builder - builds the path array
+   - `includes` builder - builds the includes lookup object
+   - And others...
+
+4. The fully-built StateObject is stored in the registry
+
+## Prototype Chain
+
+The StateObject prototype chain:
+
+```
+(StateObject instance)
+  ↓ prototypally inherits from
+(StateObject.prototype)
+  ↓ prototypally inherits from
+(StateDeclaration object)
+  ↓ prototypally inherits from
+(StateDeclaration's prototype)
+```
+
+This allows StateObject to access StateDeclaration properties while adding its own built properties.
+
+## Example Structure
+
+```typescript
+// StateDeclaration
+const usersDef = {
+  name: 'users',
+  url: '/users',
+  data: { requiresAuth: true }
+};
+
+// After registration, the StateObject:
+const usersState = stateRegistry.get('users').$$state();
+
+// Properties:
+usersState.name;        // 'users'
+usersState.parent;      // (root StateObject)
+usersState.url;         // UrlMatcher instance
+usersState.params;      // {}
+usersState.path;        // [rootState, usersState]
+usersState.navigable;   // usersState (itself)
+usersState.includes;    // { '': true, 'users': true }
+usersState.self;        // usersDef (original declaration)
+usersState.data;        // { requiresAuth: true }
+```
+
+## Comparison with StateDeclaration
+
+**StateDeclaration** (user-facing):
+- Configuration object provided by developer
+- Plain object with state configuration
+- Used for state definition
+- Extends to framework-specific properties
+
+**StateObject** (internal):
+- Internal representation created by UI-Router
+- Built from StateDeclaration by StateBuilder
+- Contains compiled/processed properties (UrlMatcher, Param[], etc.)
+- Used internally by the router
+
+## See Also
+
+- [StateDeclaration](/api/state-declaration) - State configuration interface
+- [StateRegistry](/api/state-registry) - State registration and management
+- [StateService](/api/state-service) - State navigation API

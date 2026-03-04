@@ -1,0 +1,327 @@
+---
+title: 'TransitionService'
+description: 'Global transition service for registering hooks and managing transitions'
+---
+
+## Overview
+
+The `TransitionService` is the primary API for registering global transition hooks in UI-Router. It provides methods to hook into various phases of the transition lifecycle.
+
+Access the transition service via `router.transitionService`.
+
+## Hook Registration Methods
+
+### onBefore
+
+Registers a hook that runs before a transition starts.
+
+```typescript
+onBefore(
+  criteria: HookMatchCriteria,
+  callback: TransitionHookFn,
+  options?: HookRegOptions
+): Function
+```
+
+**Lifecycle**: Invoked synchronously before the transition begins. No resolves have been fetched yet.
+
+**Return value**: Can return `false` to cancel, a `TargetState` to redirect, or a `Promise`.
+
+**Example - Default Substate**:
+```typescript
+transitionService.onBefore({ to: 'home' }, (trans: Transition) => {
+  return trans.router.stateService.target('home.dashboard');
+});
+```
+
+**Example - Require Authentication**:
+```typescript
+transitionService.onBefore({ to: 'requireauth.**' }, (trans) => {
+  const myAuthService = trans.injector().get('MyAuthService');
+  return myAuthService.isAuthenticated();
+});
+```
+
+### onStart
+
+Registers a hook that runs when a transition starts.
+
+```typescript
+onStart(
+  criteria: HookMatchCriteria,
+  callback: TransitionHookFn,
+  options?: HookRegOptions
+): Function
+```
+
+**Lifecycle**: Invoked asynchronously after `onBefore` phase completes, before any states are entered/exited.
+
+**Return value**: Can return `false` to cancel, a `TargetState` to redirect, or a `Promise`.
+
+**Example - Login During Transition**:
+```typescript
+transitionService.onStart({ to: 'auth.**' }, (trans) => {
+  const myAuthService = trans.injector().get('MyAuthService');
+  
+  if (!myAuthService.isAuthenticated()) {
+    return myAuthService.authenticate().catch(() => {
+      return trans.router.stateService.target('guest');
+    });
+  }
+});
+```
+
+### onEnter
+
+Registers a hook for when a specific state is being entered.
+
+```typescript
+onEnter(
+  criteria: HookMatchCriteria,
+  callback: TransitionStateHookFn,
+  options?: HookRegOptions
+): Function
+```
+
+**Lifecycle**: Invoked when entering a state, after `onRetain` phase. Parent states are entered before children.
+
+**Callback signature**:
+```typescript
+(transition: Transition, state: StateDeclaration) => HookResult
+```
+
+**Example - Audit Log**:
+```typescript
+transitionService.onEnter({ entering: 'admin' }, (trans, state) => {
+  const auditService = trans.injector().get('AuditService');
+  auditService.log(`Entered ${state.name} module`);
+});
+```
+
+### onExit
+
+Registers a hook for when a specific state is being exited.
+
+```typescript
+onExit(
+  criteria: HookMatchCriteria,
+  callback: TransitionStateHookFn,
+  options?: HookRegOptions
+): Function
+```
+
+**Lifecycle**: Invoked when exiting a state, after `onStart` phase. Child states are exited before parents.
+
+**Callback signature**:
+```typescript
+(transition: Transition, state: StateDeclaration) => HookResult
+```
+
+**Example - Cleanup**:
+```typescript
+transitionService.onExit({ exiting: 'editor' }, (trans, state) => {
+  const editorService = trans.injector().get('EditorService');
+  return editorService.confirmUnsavedChanges();
+});
+```
+
+### onRetain
+
+Registers a hook for when a state is retained (remains active).
+
+```typescript
+onRetain(
+  criteria: HookMatchCriteria,
+  callback: TransitionStateHookFn,
+  options?: HookRegOptions
+): Function
+```
+
+**Lifecycle**: Invoked for states that remain active during the transition. Called after `onExit` phase.
+
+**Callback signature**:
+```typescript
+(transition: Transition, state: StateDeclaration) => HookResult
+```
+
+**Use case**: Moving between substates of a parent state (e.g., wizard steps).
+
+### onFinish
+
+Registers a hook that runs just before the transition completes.
+
+```typescript
+onFinish(
+  criteria: HookMatchCriteria,
+  callback: TransitionHookFn,
+  options?: HookRegOptions
+): Function
+```
+
+**Lifecycle**: Invoked after `onEnter` phase, just before the transition is committed. Last chance to cancel/redirect.
+
+### onSuccess
+
+Registers a hook that runs after a successful transition.
+
+```typescript
+onSuccess(
+  criteria: HookMatchCriteria,
+  callback: TransitionHookFn,
+  options?: HookRegOptions
+): Function
+```
+
+**Lifecycle**: Invoked after transition completes successfully.
+
+**Return value**: Ignored (transition already complete).
+
+**Example - Analytics**:
+```typescript
+transitionService.onSuccess({}, (trans) => {
+  analytics.track('pageview', {
+    state: trans.to().name,
+    params: trans.params()
+  });
+});
+```
+
+### onError
+
+Registers a hook that runs when a transition fails.
+
+```typescript
+onError(
+  criteria: HookMatchCriteria,
+  callback: TransitionHookFn,
+  options?: HookRegOptions
+): Function
+```
+
+**Lifecycle**: Invoked if transition fails for any reason (cancelled, rejected, error thrown).
+
+**Return value**: Ignored (transition already failed).
+
+**Example - Error Handling**:
+```typescript
+transitionService.onError({}, (trans) => {
+  const error = trans.error();
+  if (error.type === RejectType.ERROR) {
+    errorService.log(error);
+  }
+});
+```
+
+## Hook Phases and Ordering
+
+Transition hooks execute in the following order:
+
+1. **CREATE** - `onCreate` (internal only)
+2. **BEFORE** - `onBefore` hooks
+3. **RUN** - Main transition execution
+   - `onStart` (priority 0)
+   - `onExit` (priority 100, reverse order)
+   - `onRetain` (priority 200)
+   - `onEnter` (priority 300)
+   - `onFinish` (priority 400)
+4. **SUCCESS** - `onSuccess` hooks (if successful)
+5. **ERROR** - `onError` hooks (if failed)
+
+<Note>
+Within each phase, hooks are invoked in priority order (highest first). Use `options.priority` to control ordering.
+</Note>
+
+## Deregistering Hooks
+
+All hook registration methods return a deregistration function:
+
+```typescript
+const deregisterFn = transitionService.onBefore({}, callback);
+
+// Later, to remove the hook:
+deregisterFn();
+```
+
+## Core Methods
+
+### create
+
+Creates a new Transition object (internal use).
+
+```typescript
+create(fromPath: PathNode[], targetState: TargetState): Transition
+```
+
+<Warning>
+This is an internal method used by StateService. Application code should not call this directly.
+</Warning>
+
+### getHooks
+
+Gets all registered hooks for a specific hook type.
+
+```typescript
+getHooks(hookName: string): RegisteredHook[]
+```
+
+**Example**:
+```typescript
+const onEnterHooks = transitionService.getHooks('onEnter');
+console.log(`${onEnterHooks.length} onEnter hooks registered`);
+```
+
+## TypeScript Types
+
+### TransitionOptions
+
+```typescript
+interface TransitionOptions {
+  location?: boolean | 'replace';  // Update browser URL
+  relative?: StateOrName;           // Relative state reference
+  inherit?: boolean;                // Inherit parameter values
+  reload?: boolean | StateOrName;   // Force state reload
+  custom?: any;                     // Custom options
+  supercede?: boolean;              // Cancel active transition
+}
+```
+
+### Default Options
+
+```typescript
+const defaultTransOpts: TransitionOptions = {
+  location: true,
+  relative: null,
+  inherit: false,
+  notify: true,
+  reload: false,
+  supercede: true,
+  custom: {},
+  current: () => null,
+  source: 'unknown',
+};
+```
+
+## Plugin API
+
+The `TransitionService` includes a plugin API for advanced use cases:
+
+```typescript
+interface TransitionServicePluginAPI {
+  _definePathType(name: string, hookScope: TransitionHookScope): void;
+  _getPathTypes(): PathTypes;
+  _defineEvent(...): void;
+  _getEvents(phase?: TransitionHookPhase): TransitionEventType[];
+  getHooks(hookName: string): RegisteredHook[];
+}
+```
+
+Access via `transitionService._pluginapi`.
+
+<Warning>
+The plugin API is for advanced plugin development. Most applications should use the standard hook registration methods.
+</Warning>
+
+## See Also
+
+- [Transition](/api/transition) - Individual transition instance API
+- [Transition Hooks](/api/transition-hooks) - Hook criteria and result types

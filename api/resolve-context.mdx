@@ -1,0 +1,237 @@
+---
+title: ResolveContext
+description: Encapsulates dependency injection for a path of nodes
+---
+
+The `ResolveContext` class encapsulates dependency injection for a path of state nodes. It provides DI for the last node in the path and manages resolvable resolution.
+
+## Overview
+
+```typescript
+class ResolveContext
+```
+
+UI-Router states are organized as a tree. When a state is being activated, each element in the path from root to the target state is wrapped as a `PathNode`. The `ResolveContext` closes over these `PathNode` objects and provides dependency injection.
+
+## Constructor
+
+```typescript
+constructor(private _path: PathNode[])
+```
+
+**Parameters:**
+- `_path` - Array of `PathNode` objects representing the state path
+
+## Methods
+
+### getTokens()
+
+Gets all tokens found in the resolve context.
+
+```typescript
+public getTokens(): any[]
+```
+
+**Returns:** De-duplicated array of all resolvable tokens in the path.
+
+### getResolvable()
+
+Gets the Resolvable that matches the token.
+
+```typescript
+public getResolvable(token: any): Resolvable
+```
+
+**Parameters:**
+- `token` - The resolvable token to find
+
+**Returns:** The last (most specific) Resolvable matching the token.
+
+**Throws:** Error if the token doesn't exist in the ResolveContext.
+
+### getPolicy()
+
+Returns the resolve policy for the given Resolvable.
+
+```typescript
+public getPolicy(resolvable: Resolvable): ResolvePolicy
+```
+
+**Parameters:**
+- `resolvable` - The Resolvable to get the policy for
+
+**Returns:** The effective resolve policy (merged from resolvable, state, and defaults).
+
+### subContext()
+
+Returns a ResolveContext that includes a portion of this one.
+
+```typescript
+public subContext(state: StateObject): ResolveContext
+```
+
+**Parameters:**
+- `state` - The state to create a subcontext up to
+
+**Returns:** A new ResolveContext containing the path from root to the specified state.
+
+This is used to create a narrower context when injecting ancestor nodes. For example, when resolving for state `B`, it should only have access to resolvables from `A` and `B`, not from child states `C` and `D`.
+
+**Example:**
+```javascript
+// Given path [A, B, C, D]
+const fullContext = new ResolveContext([A, B, C, D]);
+const subContext = fullContext.subContext(B);
+// subContext path: [A, B]
+```
+
+### addResolvables()
+
+Adds Resolvables to the node matching the state.
+
+```typescript
+public addResolvables(
+  newResolvables: Resolvable[],
+  state: StateObject
+): void
+```
+
+**Parameters:**
+- `newResolvables` - Array of new Resolvables to add
+- `state` - Used to find the node to add resolvables to
+
+This adds resolvables (generally created on the fly) to the node matching the state. These new resolvables are not automatically fetched.
+
+### resolvePath()
+
+Returns a promise for an array of resolved path elements.
+
+```typescript
+public resolvePath(
+  when?: 'LAZY' | 'EAGER',
+  trans?: Transition
+): Promise<{ token: any; value: any }[]>
+```
+
+**Parameters:**
+- `when` - Which resolvables to fetch (`'LAZY'` or `'EAGER'`; defaults to `'LAZY'`)
+- `trans` - The transition (optional)
+
+**Returns:** Promise that resolves with an array of `{ token, value }` objects.
+
+- `'EAGER'` - Fetch only EAGER resolvables
+- `'LAZY'` - Fetch both EAGER and LAZY resolvables
+
+### injector()
+
+Gets the UIInjector for this context.
+
+```typescript
+public injector(): UIInjector
+```
+
+**Returns:** A `UIInjector` that can inject values from this resolve context.
+
+**Example:**
+```javascript
+const injector = resolveContext.injector();
+const user = injector.get('user');
+```
+
+### findNode()
+
+Finds the PathNode containing a specific Resolvable.
+
+```typescript
+public findNode(resolvable: Resolvable): PathNode
+```
+
+**Parameters:**
+- `resolvable` - The Resolvable to find
+
+**Returns:** The PathNode containing the resolvable.
+
+### getDependencies()
+
+Gets the async dependencies of a Resolvable.
+
+```typescript
+public getDependencies(resolvable: Resolvable): Resolvable[]
+```
+
+**Parameters:**
+- `resolvable` - The Resolvable to get dependencies for
+
+**Returns:** Array of Resolvables that are dependencies.
+
+## UIInjector Interface
+
+The injector returned by `injector()` implements:
+
+```typescript
+interface UIInjector {
+  get(token: any): any;
+  getAsync(token: any): Promise<any>;
+  getNative(token: any): any;
+}
+```
+
+### get()
+
+Gets a synchronous value from the injector.
+
+```typescript
+get(token: any): any
+```
+
+**Parameters:**
+- `token` - The token to inject
+
+**Returns:** The resolved value.
+
+**Throws:** Error if the resolvable hasn't finished resolving yet.
+
+### getAsync()
+
+Gets an asynchronous value from the injector.
+
+```typescript
+getAsync(token: any): Promise<any>
+```
+
+**Parameters:**
+- `token` - The token to inject
+
+**Returns:** Promise for the resolved value.
+
+### getNative()
+
+Gets a value from the native injector.
+
+```typescript
+getNative(token: any): any
+```
+
+**Parameters:**
+- `token` - The token to inject
+
+**Returns:** The value from the framework's native DI system.
+
+## Example Usage
+
+```javascript
+// During a transition
+const resolveContext = new ResolveContext(toPath);
+
+// Resolve all LAZY resolvables
+await resolveContext.resolvePath('LAZY', transition);
+
+// Inject a resolved value
+const injector = resolveContext.injector();
+const user = injector.get('user');
+```
+
+## Related
+
+- [Resolvable](/api/resolvable)
+- [Transition](/api/transition)

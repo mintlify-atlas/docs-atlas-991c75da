@@ -1,0 +1,308 @@
+---
+title: UIRouter
+description: The core UIRouter class that contains all router services and APIs
+---
+
+## Overview
+
+An instance of UI-Router. This object contains references to service APIs which define your application's routing behavior.
+
+## Properties
+
+### trace
+
+<ParamField path="trace" type="Trace">
+  Enable/disable tracing to the javascript console for debugging purposes.
+</ParamField>
+
+```typescript
+router.trace.enable('TRANSITION');
+```
+
+### viewService
+
+<ParamField path="viewService" type="ViewService">
+  Provides services related to ui-view synchronization
+</ParamField>
+
+### globals
+
+<ParamField path="globals" type="UIRouterGlobals">
+  An object that contains global router state, such as the current state and params
+</ParamField>
+
+```typescript
+const currentState = router.globals.current;
+const currentParams = router.globals.params;
+```
+
+See [UIRouterGlobals](/api/globals) for detailed documentation.
+
+### transitionService
+
+<ParamField path="transitionService" type="TransitionService">
+  A service that exposes global Transition Hooks
+</ParamField>
+
+```typescript
+router.transitionService.onStart({}, (transition) => {
+  console.log('Transition started');
+});
+```
+
+### urlService
+
+<ParamField path="urlService" type="UrlService">
+  Provides services related to the URL
+</ParamField>
+
+```typescript
+router.urlService.url('/home');
+```
+
+### stateRegistry
+
+<ParamField path="stateRegistry" type="StateRegistry">
+  Provides a registry for states, and related registration services
+</ParamField>
+
+```typescript
+router.stateRegistry.register({
+  name: 'home',
+  url: '/home',
+  component: HomeComponent
+});
+```
+
+### stateService
+
+<ParamField path="stateService" type="StateService">
+  Provides services related to states
+</ParamField>
+
+```typescript
+router.stateService.go('home');
+```
+
+### locationService
+
+<ParamField path="locationService" type="LocationServices">
+  Handles low level URL read/write operations
+</ParamField>
+
+### locationConfig
+
+<ParamField path="locationConfig" type="LocationConfig">
+  Returns low level URL configuration and metadata
+</ParamField>
+
+## Methods
+
+### plugin()
+
+Adds a plugin to UI-Router. A plugin can enhance or change UI-Router behavior using any public API.
+
+```typescript
+plugin<T extends UIRouterPlugin>(
+  plugin: { new (router: UIRouter, options?: any): T },
+  options?: any
+): T
+```
+
+<ParamField path="plugin" type="UIRouterPlugin | PluginFactory" required>
+  One of:
+  - A plugin class which implements `UIRouterPlugin`
+  - A constructor function for a `UIRouterPlugin` which accepts a `UIRouter` instance
+  - A factory function which accepts a `UIRouter` instance and returns a `UIRouterPlugin` instance
+</ParamField>
+
+<ParamField path="options" type="any">
+  Options to pass to the plugin class/factory
+</ParamField>
+
+**Returns:** The registered plugin instance
+
+#### Example: Basic Plugin
+
+```typescript
+import { MyCoolPlugin } from 'ui-router-cool-plugin';
+
+const plugin = router.plugin(MyCoolPlugin);
+```
+
+#### Example: Plugin Authoring
+
+A plugin is simply a class (or constructor function) which accepts a `UIRouter` instance and (optionally) an options object.
+
+```typescript
+export class MyAuthPlugin implements UIRouterPlugin {
+  name = 'MyAuthPlugin';
+
+  constructor(router: UIRouter, options: any) {
+    const $transitions = router.transitionService;
+    const $state = router.stateService;
+
+    const authCriteria = {
+      to: (state) => state.data && state.data.requiresAuth
+    };
+
+    function authHook(transition: Transition) {
+      const authService = transition.injector().get('AuthService');
+      if (!authService.isAuthenticated()) {
+        return $state.target('login');
+      }
+    }
+
+    $transitions.onStart(authCriteria, authHook);
+  }
+}
+```
+
+### getPlugin()
+
+Returns a plugin registered with the given `pluginName`, or all registered plugins.
+
+```typescript
+getPlugin(): UIRouterPlugin[]
+getPlugin(pluginName: string): UIRouterPlugin
+```
+
+<ParamField path="pluginName" type="string">
+  The name of the plugin to get (optional)
+</ParamField>
+
+**Returns:** The plugin, or array of all plugins if no name provided
+
+#### Example
+
+```typescript
+// Get specific plugin
+const myPlugin = router.getPlugin('MyAuthPlugin');
+
+// Get all plugins
+const allPlugins = router.getPlugin();
+```
+
+### disposable()
+
+Registers an object to be notified when the router is disposed.
+
+```typescript
+disposable(disposable: Disposable): void
+```
+
+<ParamField path="disposable" type="Disposable" required>
+  An object with a `dispose(router: UIRouter)` method
+</ParamField>
+
+#### Example
+
+```typescript
+const myService = {
+  dispose(router) {
+    // Clean up resources
+  }
+};
+
+router.disposable(myService);
+```
+
+### dispose()
+
+Disposes this router instance. When called, clears resources retained by the router by calling `dispose(this)` on all registered disposable objects.
+
+```typescript
+dispose(disposable?: any): void
+```
+
+<ParamField path="disposable" type="any">
+  Optional: If provided, calls `dispose(this)` on that object only
+</ParamField>
+
+#### Example
+
+```typescript
+// Dispose entire router
+router.dispose();
+
+// Dispose specific object
+router.dispose(myService);
+```
+
+## Constructor
+
+Creates a new `UIRouter` object.
+
+```typescript
+constructor(
+  locationService?: LocationServices,
+  locationConfig?: LocationConfig
+)
+```
+
+<ParamField path="locationService" type="LocationServices">
+  A LocationServices implementation (defaults to stub)
+</ParamField>
+
+<ParamField path="locationConfig" type="LocationConfig">
+  A LocationConfig implementation (defaults to stub)
+</ParamField>
+
+#### Example
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+import { pushStateLocationService } from '@uirouter/core';
+import { browserLocationConfig } from '@uirouter/core';
+
+const router = new UIRouter(
+  pushStateLocationService,
+  browserLocationConfig
+);
+```
+
+## Deprecated Properties
+
+### urlMatcherFactory
+
+<Warning>
+  Deprecated for public use. Use `urlService` instead.
+</Warning>
+
+<ParamField path="urlMatcherFactory" type="UrlMatcherFactory">
+  Legacy URL matcher factory
+</ParamField>
+
+### urlRouter
+
+<Warning>
+  Deprecated for public use. Use `urlService` instead.
+</Warning>
+
+<ParamField path="urlRouter" type="UrlRouter">
+  Legacy URL router
+</ParamField>
+
+## Related Types
+
+### UIRouterPlugin
+
+```typescript
+interface UIRouterPlugin extends Disposable {
+  name: string;
+}
+```
+
+### Disposable
+
+```typescript
+interface Disposable {
+  dispose(router?: UIRouter): void;
+}
+```
+
+### PluginFactory
+
+```typescript
+type PluginFactory<T> = (router: UIRouter, options?: any) => T;
+```

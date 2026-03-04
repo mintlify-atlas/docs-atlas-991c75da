@@ -1,0 +1,258 @@
+---
+title: LocationConfig
+description: Returns low-level URL configuration and metadata
+---
+
+The `LocationConfig` interface returns information about the location configuration, primarily used when building URLs.
+
+## Overview
+
+```typescript
+interface LocationConfig extends Disposable
+```
+
+This interface is implemented by location configuration providers that return metadata about the current location setup. UI-Router Core includes two basic implementations:
+
+- **BrowserLocationConfig** - Browser-based configuration
+- **MemoryLocationConfig** - In-memory configuration
+
+## Methods
+
+### port()
+
+Gets the port number.
+
+```typescript
+port(): number
+```
+
+**Returns:** The port number (e.g., `80`, `443`, `3000`).
+
+**Example:**
+```javascript
+locationConfig.port();
+// Returns: 80
+```
+
+### protocol()
+
+Gets the protocol.
+
+```typescript
+protocol(): string
+```
+
+**Returns:** The protocol (e.g., `"http"`, `"https"`).
+
+**Example:**
+```javascript
+locationConfig.protocol();
+// Returns: "https"
+```
+
+### host()
+
+Gets the hostname.
+
+```typescript
+host(): string
+```
+
+**Returns:** The hostname (e.g., `"localhost"`, `"example.com"`).
+
+**Example:**
+```javascript
+locationConfig.host();
+// Returns: "example.com"
+```
+
+### baseHref()
+
+Gets the base HREF.
+
+```typescript
+baseHref(): string
+```
+
+**Returns:** The application's base href (e.g., `"http://localhost/approot/"`).
+
+The base href is used as the prefix for all application URLs. It's typically set using the HTML `<base>` tag or configured programmatically.
+
+**Example:**
+```javascript
+locationConfig.baseHref();
+// Returns: "http://localhost:8080/myapp/"
+```
+
+### html5Mode()
+
+Returns whether HTML5 mode is enabled.
+
+```typescript
+html5Mode(): boolean
+```
+
+**Returns:** `true` if running in HTML5 mode (pushState), `false` if using hash-based routing.
+
+**Example:**
+```javascript
+locationConfig.html5Mode();
+// Returns: true (using pushState)
+// or: false (using hash-based routing)
+```
+
+### hashPrefix()
+
+Gets or sets the hash prefix.
+
+```typescript
+hashPrefix(newprefix?: string): string
+```
+
+**Parameters:**
+- `newprefix` - The new hash prefix to set (optional)
+
+**Returns:** The current hash prefix.
+
+This only applies when not running in HTML5 mode. The hash prefix appears between the `#` and the route path.
+
+**Example:**
+```javascript
+// Get current prefix
+locationConfig.hashPrefix();
+// Returns: "!"
+
+// Set new prefix
+locationConfig.hashPrefix("#");
+
+// URL format with prefix "!":
+// http://example.com/#!/path/to/state
+
+// URL format with prefix "":
+// http://example.com/#/path/to/state
+```
+
+### dispose()
+
+Cleans up the location config.
+
+```typescript
+dispose(): void
+```
+
+Called when the router is disposed.
+
+## Building Absolute URLs
+
+The information from `LocationConfig` can be used to build absolute URLs:
+
+```javascript
+function buildAbsoluteUrl(path, search, hash) {
+  const config = router.urlService.config;
+  
+  const protocol = config.protocol();
+  const host = config.host();
+  const port = config.port();
+  const baseHref = config.baseHref();
+  
+  const portPart = (port === 80 || port === 443) ? '' : `:${port}`;
+  const searchPart = search ? `?${search}` : '';
+  const hashPart = hash ? `#${hash}` : '';
+  
+  return `${protocol}://${host}${portPart}${baseHref}${path}${searchPart}${hashPart}`;
+}
+
+// Example usage
+const url = buildAbsoluteUrl('/state/path', 'param=value', 'anchor');
+// Result: "https://example.com:443/approot/state/path?param=value#anchor"
+```
+
+## Implementation Notes
+
+### BrowserLocationConfig
+
+Reads configuration from the browser's `window.location` and HTML `<base>` tag.
+
+**Features:**
+- Automatically detects protocol, host, port from browser
+- Reads base href from `<base>` tag
+- Supports both pushState and hash modes
+
+**Example:**
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="/myapp/">
+</head>
+<body>
+  <!-- Application -->
+</body>
+</html>
+```
+
+```javascript
+// With above HTML
+locationConfig.baseHref();
+// Returns: "http://localhost:8080/myapp/"
+```
+
+### MemoryLocationConfig
+
+Provides configurable in-memory configuration.
+
+**Features:**
+- Useful for testing and server-side rendering
+- All values are configurable
+- No browser dependencies
+
+**Example:**
+```javascript
+const memoryConfig = new MemoryLocationConfig();
+memoryConfig._baseHref = 'http://test.example.com/app/';
+memoryConfig._port = 8080;
+memoryConfig._protocol = 'http';
+memoryConfig._host = 'test.example.com';
+```
+
+## Creating Custom Implementations
+
+Implement the `LocationConfig` interface for custom location configuration:
+
+```typescript
+class CustomLocationConfig implements LocationConfig {
+  port(): number {
+    return 8080;
+  }
+  
+  protocol(): string {
+    return 'https';
+  }
+  
+  host(): string {
+    return 'api.example.com';
+  }
+  
+  baseHref(): string {
+    return 'https://api.example.com:8080/';
+  }
+  
+  html5Mode(): boolean {
+    return true;
+  }
+  
+  hashPrefix(newprefix?: string): string {
+    return '!';
+  }
+  
+  dispose(): void {
+    // Cleanup
+  }
+}
+```
+
+## Related
+
+- [LocationServices](/api/location-services)
+- [UrlConfig](/api/url-config)
+- [UrlService](/api/url-service)

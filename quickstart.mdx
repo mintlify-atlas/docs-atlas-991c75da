@@ -1,80 +1,516 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Build your first UI-Router Core application with states, navigation, and URL routing
 ---
 
-## Get started in three steps
+This guide will walk you through creating a complete working router using UI-Router Core. You'll learn how to create a router instance, register states, handle navigation, and work with parameters.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Ensure you have UI-Router Core installed in your project. If not, see the [Installation](/installation) guide.
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Step 1: Create and Configure the Router
 
-### Step 2: Deploy your changes
+First, create a UIRouter instance and add the location plugin:
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+```typescript
+import { UIRouter } from '@uirouter/core';
+import { pushStateLocationPlugin } from '@uirouter/core';
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+// Create the router instance
+const router = new UIRouter();
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+// Add HTML5 pushState support
+router.plugin(pushStateLocationPlugin);
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+This example uses `pushStateLocationPlugin` for clean URLs. You can use `hashLocationPlugin` instead if you prefer hash-based routing or cannot configure server-side URL rewriting.
 </Note>
+
+## Step 2: Register States
+
+Define your application states using the StateRegistry:
+
+```typescript
+// Register the home state
+router.stateRegistry.register({
+  name: 'home',
+  url: '/',
+  // In a real app, you'd render a component here
+  onEnter: () => {
+    document.getElementById('app').innerHTML = '<h1>Home Page</h1>';
+  }
+});
+
+// Register an about state
+router.stateRegistry.register({
+  name: 'about',
+  url: '/about',
+  onEnter: () => {
+    document.getElementById('app').innerHTML = '<h1>About Page</h1>';
+  }
+});
+
+// Register a user detail state with parameters
+router.stateRegistry.register({
+  name: 'user',
+  url: '/user/:userId',
+  onEnter: (transition) => {
+    const userId = transition.params().userId;
+    document.getElementById('app').innerHTML = 
+      `<h1>User Profile</h1><p>User ID: ${userId}</p>`;
+  }
+});
+```
+
+### Understanding State Configuration
+
+Each state declaration includes:
+
+- **name**: Unique identifier for the state (required)
+- **url**: URL pattern for the state
+- **onEnter**: Hook called when entering the state
+- **onExit**: Hook called when leaving the state
+
+<Tip>
+In framework-specific implementations (Angular, React, etc.), you'd specify a `component` instead of using `onEnter` hooks.
+</Tip>
+
+## Step 3: Create Navigation
+
+Use the StateService to navigate between states programmatically:
+
+```typescript
+// Navigate to a state by name
+router.stateService.go('home');
+
+// Navigate with parameters
+router.stateService.go('user', { userId: 123 });
+
+// Navigate with options
+router.stateService.go('about', {}, { 
+  reload: true,    // Force reload even if already on the state
+  notify: true     // Trigger transition hooks
+});
+```
+
+### Creating Navigation Links
+
+For HTML navigation, you can create helper functions:
+
+```typescript
+function createNavLink(stateName: string, params = {}, text: string) {
+  const link = document.createElement('a');
+  link.textContent = text;
+  link.href = router.stateService.href(stateName, params);
+  
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    router.stateService.go(stateName, params);
+  });
+  
+  return link;
+}
+
+// Usage
+const homeLink = createNavLink('home', {}, 'Home');
+const aboutLink = createNavLink('about', {}, 'About');
+const userLink = createNavLink('user', { userId: 42 }, 'User Profile');
+```
+
+## Step 4: Start the Router
+
+Enable URL listening and synchronize with the current URL:
+
+```typescript
+// Start listening to URL changes
+router.urlService.listen();
+
+// Sync with the current browser URL
+router.urlService.sync();
+```
+
+<Warning>
+Always call `listen()` before `sync()`. The `listen()` method starts monitoring URL changes, while `sync()` performs the initial routing based on the current URL.
+</Warning>
+
+## Step 5: Working with Nested States
+
+Create parent-child state relationships:
+
+```typescript
+// Parent state
+router.stateRegistry.register({
+  name: 'admin',
+  url: '/admin',
+  abstract: true,  // Cannot be activated directly
+  onEnter: () => {
+    console.log('Entering admin area');
+  }
+});
+
+// Child states inherit URL and properties from parent
+router.stateRegistry.register({
+  name: 'admin.dashboard',
+  url: '/dashboard',
+  onEnter: () => {
+    document.getElementById('app').innerHTML = '<h1>Admin Dashboard</h1>';
+  }
+  // Full URL will be: /admin/dashboard
+});
+
+router.stateRegistry.register({
+  name: 'admin.users',
+  url: '/users',
+  onEnter: () => {
+    document.getElementById('app').innerHTML = '<h1>User Management</h1>';
+  }
+  // Full URL will be: /admin/users  
+});
+```
+
+### Benefits of Nested States
+
+<AccordionGroup>
+  <Accordion title="URL composition">
+    Child state URLs are automatically composed with parent URLs. A state `admin.users` with url `/users` under parent `admin` with url `/admin` creates the full URL `/admin/users`.
+  </Accordion>
+  
+  <Accordion title="Inherited properties">
+    Child states inherit resolve data, parameters, and other properties from parent states.
+  </Accordion>
+  
+  <Accordion title="Lifecycle hooks">
+    Parent state hooks run before child state hooks, allowing for setup/teardown logic.
+  </Accordion>
+</AccordionGroup>
+
+## Step 6: Using Resolve for Async Data
+
+Fetch data before entering a state:
+
+```typescript
+// Mock API service
+const UserService = {
+  getUser: (id: number) => {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ id, name: `User ${id}`, email: `user${id}@example.com` });
+      }, 500);
+    });
+  }
+};
+
+router.stateRegistry.register({
+  name: 'userDetail',
+  url: '/user/:userId',
+  resolve: [
+    {
+      token: 'user',
+      deps: [Transition],
+      resolveFn: (transition) => {
+        const userId = transition.params().userId;
+        return UserService.getUser(userId);
+      }
+    }
+  ],
+  onEnter: (transition) => {
+    // Resolved data is available in the transition injector
+    const user = transition.injector().get('user');
+    document.getElementById('app').innerHTML = `
+      <h1>${user.name}</h1>
+      <p>Email: ${user.email}</p>
+      <p>ID: ${user.id}</p>
+    `;
+  }
+});
+```
+
+<Note>
+The state won't activate until all resolves complete successfully. If a resolve rejects, the transition is aborted.
+</Note>
+
+## Step 7: Adding Transition Hooks
+
+Attach behavior to state transitions:
+
+```typescript
+import { Transition } from '@uirouter/core';
+
+// Log all state transitions
+router.transitionService.onStart({}, (transition: Transition) => {
+  console.log(`Navigating from ${transition.from().name} to ${transition.to().name}`);
+});
+
+// Require authentication for admin states
+router.transitionService.onBefore(
+  { to: 'admin.**' },  // Match admin and all descendants
+  (transition: Transition) => {
+    const isAuthenticated = checkAuth(); // Your auth check function
+    
+    if (!isAuthenticated) {
+      // Redirect to login
+      return router.stateService.target('login', {
+        returnTo: transition.to().name
+      });
+    }
+  }
+);
+
+// Track successful transitions
+router.transitionService.onSuccess({}, (transition: Transition) => {
+  console.log('Transition completed:', transition.to().name);
+  // Update analytics, etc.
+});
+
+// Handle transition errors
+router.transitionService.onError({}, (transition: Transition) => {
+  console.error('Transition failed:', transition.error());
+});
+```
+
+### Available Hook Types
+
+<CodeGroup>
+```typescript onBefore
+// Runs before transition starts
+// Can cancel or redirect the transition
+router.transitionService.onBefore(criteria, callback);
+```
+
+```typescript onStart
+// Runs as transition begins
+// After onBefore hooks pass
+router.transitionService.onStart(criteria, callback);
+```
+
+```typescript onEnter
+// Runs when entering a state  
+// Called for each state being entered
+router.transitionService.onEnter(criteria, callback);
+```
+
+```typescript onExit
+// Runs when exiting a state
+// Called for each state being exited  
+router.transitionService.onExit(criteria, callback);
+```
+
+```typescript onSuccess
+// Runs after successful transition
+router.transitionService.onSuccess(criteria, callback);
+```
+
+```typescript onError
+// Runs when transition fails
+router.transitionService.onError(criteria, callback);
+```
+</CodeGroup>
+
+## Step 8: Working with Parameters
+
+Handle different types of parameters:
+
+```typescript
+// URL parameters (in the path)
+router.stateRegistry.register({
+  name: 'product',
+  url: '/product/:productId',
+  // productId is required and in the URL
+});
+
+// Query parameters
+router.stateRegistry.register({
+  name: 'search',
+  url: '/search?query&page',
+  // query and page are optional query parameters
+});
+
+// Typed parameters
+router.stateRegistry.register({
+  name: 'article',
+  url: '/article/:articleId',
+  params: {
+    articleId: { 
+      type: 'int',  // Built-in type coercion
+      value: null   // Default value
+    },
+    showComments: {
+      type: 'bool',
+      value: true,
+      squash: true  // Remove from URL if value is default
+    }
+  }
+});
+
+// Navigate with parameters
+router.stateService.go('search', {
+  query: 'ui-router',
+  page: 2
+});
+
+// Access current parameters
+const currentParams = router.stateService.params;
+console.log(currentParams.query, currentParams.page);
+```
+
+### Parameter Types
+
+<AccordionGroup>
+  <Accordion title="string (default)">
+    Plain string values, no encoding/decoding
+  </Accordion>
+  
+  <Accordion title="int">
+    Converts to/from integers. Non-integer values are rejected.
+  </Accordion>
+  
+  <Accordion title="bool">
+    Converts to/from booleans. Accepts `true`, `false`, `0`, `1`, `"true"`, `"false"`.
+  </Accordion>
+  
+  <Accordion title="date">
+    Converts to/from Date objects. Encodes as ISO 8601 string.
+  </Accordion>
+  
+  <Accordion title="json">
+    Encodes/decodes as JSON strings. Useful for complex objects.
+  </Accordion>
+</AccordionGroup>
+
+## Complete Example
+
+Here's a complete working example combining all the concepts:
+
+```typescript
+import { UIRouter, Transition } from '@uirouter/core';
+import { pushStateLocationPlugin } from '@uirouter/core';
+
+// Create and configure router
+const router = new UIRouter();
+router.plugin(pushStateLocationPlugin);
+
+// Mock data service
+const DataService = {
+  getUsers: () => Promise.resolve([
+    { id: 1, name: 'Alice' },
+    { id: 2, name: 'Bob' }
+  ]),
+  getUser: (id: number) => Promise.resolve(
+    { id, name: `User ${id}`, email: `user${id}@example.com` }
+  )
+};
+
+// Register states
+router.stateRegistry.register({
+  name: 'home',
+  url: '/',
+  onEnter: () => {
+    render('<h1>Home</h1><p>Welcome to UI-Router Core</p>');
+  }
+});
+
+router.stateRegistry.register({
+  name: 'users',
+  url: '/users',
+  resolve: [
+    {
+      token: 'users',
+      resolveFn: () => DataService.getUsers()
+    }
+  ],
+  onEnter: (transition: Transition) => {
+    const users = transition.injector().get('users');
+    const html = `
+      <h1>Users</h1>
+      <ul>
+        ${users.map(u => `<li><a href="${router.stateService.href('user', {userId: u.id})}">${u.name}</a></li>`).join('')}
+      </ul>
+    `;
+    render(html);
+  }
+});
+
+router.stateRegistry.register({
+  name: 'user',
+  url: '/user/:userId',
+  params: {
+    userId: { type: 'int' }
+  },
+  resolve: [
+    {
+      token: 'user',
+      deps: [Transition],
+      resolveFn: (trans: Transition) => DataService.getUser(trans.params().userId)
+    }
+  ],
+  onEnter: (transition: Transition) => {
+    const user = transition.injector().get('user');
+    const html = `
+      <h1>${user.name}</h1>
+      <p>Email: ${user.email}</p>
+      <p><a href="${router.stateService.href('users')}">Back to Users</a></p>
+    `;
+    render(html);
+  }
+});
+
+// Add global transition logging
+router.transitionService.onStart({}, (transition: Transition) => {
+  console.log(`Transition: ${transition.from().name} -> ${transition.to().name}`);
+});
+
+// Utility render function
+function render(html: string) {
+  const app = document.getElementById('app');
+  if (app) app.innerHTML = html;
+}
+
+// Start the router
+router.urlService.listen();
+router.urlService.sync();
+
+// Export for global access
+export { router };
+```
+
+## Debugging and Tracing
+
+Enable detailed logging to debug your router:
+
+```typescript
+// Enable all tracing
+router.trace.enable('TRANSITION');
+
+// Available trace categories
+router.trace.enable('RESOLVE');      // Resolve data fetching
+router.trace.enable('VIEWCONFIG');   // View configuration
+router.trace.enable('UIVIEW');       // UI-View rendering
+```
+
+<Tip>
+Use tracing during development to understand transition flow, but disable it in production for better performance.
+</Tip>
+
+## Next Steps
+
+Now that you have a working router, explore these topics:
+
+<CardGroup cols={2}>
+  <Card title="Core Concepts" icon="book" href="/concepts/overview">
+    Understand states, transitions, and the state tree in depth
+  </Card>
+  
+  <Card title="State Configuration" icon="gear" href="/guides/state-configuration">
+    Learn all state configuration options and patterns
+  </Card>
+  
+  <Card title="Transition Hooks" icon="link" href="/guides/transition-hooks">
+    Master the transition lifecycle and hook types
+  </Card>
+  
+  <Card title="URL Routing" icon="route" href="/guides/url-routing">
+    Advanced URL patterns and parameter handling
+  </Card>
+</CardGroup>

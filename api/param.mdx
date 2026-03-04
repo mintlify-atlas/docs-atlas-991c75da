@@ -1,0 +1,231 @@
+---
+title: Param
+description: Represents a single parameter within a URL pattern
+---
+
+The `Param` class represents a single parameter within a URL pattern. It manages parameter metadata, encoding/decoding, validation, and default values.
+
+## Overview
+
+```typescript
+class Param
+```
+
+Param objects are created internally by the framework when parsing URL patterns or state parameter declarations. They handle type coercion, validation, and URL encoding/decoding for individual parameters.
+
+## Properties
+
+### id
+
+```typescript
+id: string
+```
+
+The parameter's name/identifier.
+
+### type
+
+```typescript
+type: ParamType
+```
+
+The parameter's type. See [ParamType](/api/param-types).
+
+### location
+
+```typescript
+location: DefType
+```
+
+Where the parameter is located:
+- `DefType.PATH` - Path parameter (e.g., `/foo/:param`)
+- `DefType.SEARCH` - Query parameter (e.g., `/foo?param=value`)
+- `DefType.CONFIG` - Non-URL parameter (defined in state params)
+
+### isOptional
+
+```typescript
+isOptional: boolean
+```
+
+`true` if the parameter is optional (has a default value or is a query parameter).
+
+### dynamic
+
+```typescript
+dynamic: boolean
+```
+
+`true` if changes to this parameter value should not cause state reload.
+
+### raw
+
+```typescript
+raw: boolean
+```
+
+`true` if the parameter value should not be URL-encoded.
+
+### squash
+
+```typescript
+squash: boolean | string
+```
+
+Defines how default parameter values are represented in URLs:
+- `false` - Include in URL
+- `true` - Omit from URL (and remove a slash if surrounded by slashes)
+- `string` - Replace with this string value
+
+### array
+
+```typescript
+array: boolean
+```
+
+`true` if the parameter value should be treated as an array.
+
+### inherit
+
+```typescript
+inherit: boolean
+```
+
+`true` if the parameter value should be inherited during transitions with `inherit: true`.
+
+## Methods
+
+### value()
+
+Gets the processed parameter value.
+
+```typescript
+public value(value?: any): any
+```
+
+**Parameters:**
+- `value` - The raw parameter value
+
+**Returns:** The processed parameter value (or default value if `value` is `undefined`).
+
+This method applies the parameter's type normalization and returns the default value if the input is `undefined`.
+
+### isDefaultValue()
+
+Checks if a value is the default value.
+
+```typescript
+public isDefaultValue(value: any): boolean
+```
+
+**Parameters:**
+- `value` - The value to check
+
+**Returns:** `true` if the value equals the default value.
+
+### validates()
+
+Validates a parameter value.
+
+```typescript
+public validates(value: any): boolean
+```
+
+**Parameters:**
+- `value` - The value to validate
+
+**Returns:** `true` if the value is valid for this parameter.
+
+### isSearch()
+
+Checks if this is a search (query) parameter.
+
+```typescript
+public isSearch(): boolean
+```
+
+**Returns:** `true` if this parameter is located in the query string.
+
+### toString()
+
+Returns a string representation of the parameter.
+
+```typescript
+public toString(): string
+```
+
+**Returns:** A string describing the parameter.
+
+## Static Methods
+
+### values()
+
+Processes an array of parameters with given values.
+
+```typescript
+static values(params: Param[], values?: RawParams): RawParams
+```
+
+**Parameters:**
+- `params` - Array of Param objects
+- `values` - Raw parameter values
+
+**Returns:** Processed parameter values.
+
+### changed()
+
+Finds parameters with different values.
+
+```typescript
+static changed(
+  params: Param[],
+  values1?: RawParams,
+  values2?: RawParams
+): Param[]
+```
+
+**Parameters:**
+- `params` - Array of Param objects
+- `values1` - First set of parameter values
+- `values2` - Second set of parameter values
+
+**Returns:** Array of Param objects whose values differ between `values1` and `values2`.
+
+### equals()
+
+Checks if two parameter value objects are equal.
+
+```typescript
+static equals(
+  params: Param[],
+  values1?: RawParams,
+  values2?: RawParams
+): boolean
+```
+
+**Parameters:**
+- `params` - Array of Param objects to check
+- `values1` - First set of parameter values
+- `values2` - Second set of parameter values
+
+**Returns:** `true` if the parameter values are equal.
+
+### validates()
+
+Validates parameter values for an array of parameters.
+
+```typescript
+static validates(params: Param[], values?: RawParams): boolean
+```
+
+**Parameters:**
+- `params` - Array of Param objects
+- `values` - Parameter values to validate
+
+**Returns:** `true` if all parameter values are valid.
+
+## Related
+
+- [ParamType](/api/param-types)
+- [ParamDeclaration](/api/param-declaration)
+- [UrlMatcher](/api/url-matcher)

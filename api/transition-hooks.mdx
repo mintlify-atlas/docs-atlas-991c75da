@@ -1,0 +1,553 @@
+---
+title: 'Transition Hooks'
+description: 'Hook registration criteria, result types, and options'
+---
+
+## Overview
+
+Transition hooks allow you to tap into the transition lifecycle. Hooks are registered with match criteria to control when they fire, and can return values to control transition behavior.
+
+## HookMatchCriteria
+
+Defines which transitions should invoke a hook.
+
+```typescript
+interface HookMatchCriteria {
+  to?: HookMatchCriterion;
+  from?: HookMatchCriterion;
+  entering?: HookMatchCriterion;
+  exiting?: HookMatchCriterion;
+  retained?: HookMatchCriterion;
+}
+```
+
+All properties are optional. Omitted properties default to `true` (match all).
+
+### HookMatchCriterion
+
+Each criterion can be:
+
+1. **String** - Glob pattern matching state name
+2. **Boolean** - `true` matches all, `false` matches none
+3. **Function** - Custom predicate: `(state, transition) => boolean`
+
+```typescript
+type HookMatchCriterion = string | boolean | IStateMatch;
+type IStateMatch = (state: StateObject, transition: Transition) => boolean;
+```
+
+## Match Criteria Examples
+
+### Basic State Matching
+
+```typescript
+// Match transition to specific state
+{ to: 'parent.child' }
+
+// Match transition from specific state
+{ from: 'parent.child' }
+```
+
+### Glob Patterns
+
+```typescript
+// Match any substate of parent
+{ to: 'parent.**' }
+
+// Match parent or any substate
+{ to: 'parent.*' }
+
+// Match any state in mymodule
+{ to: 'mymodule.**' }
+```
+
+### Multiple Criteria
+
+```typescript
+// Match specific from/to combination
+{
+  from: 'parent.child',
+  to: 'parent'
+}
+
+// Match coming from any parent substate to parent
+{
+  from: 'parent.**',
+  to: 'parent'
+}
+```
+
+### Function Predicates
+
+```typescript
+// Match states with specific data
+{
+  to: (state) => state.data?.authRequired === true
+}
+
+// Match based on state properties
+{
+  to: (state) => state.data?.requiresPremium === true
+}
+
+// Match using transition context
+{
+  from: (state, transition) => {
+    return state.self.name === '' || transition.options().reload;
+  }
+}
+```
+
+### Entering/Exiting/Retained
+
+```typescript
+// Match when entering specific state
+{ entering: 'admin' }
+
+// Match when exiting specific state
+{ exiting: 'editor' }
+
+// Match when retaining specific state
+{ retained: 'parent' }
+```
+
+### Complex Example
+
+```typescript
+// Match transitioning to admin from non-admin, when entering admin state
+{
+  to: 'admin.**',
+  from: (state) => !state.name.startsWith('admin'),
+  entering: 'admin'
+}
+```
+
+## HookRegOptions
+
+Options for configuring hook registration.
+
+```typescript
+interface HookRegOptions {
+  priority?: number;
+  bind?: any;
+  invokeLimit?: number;
+}
+```
+
+### priority
+
+Controls hook execution order within a phase. Higher priority = earlier execution.
+
+```typescript
+// This runs before default priority (0)
+transitionService.onBefore({}, callback, { priority: 100 });
+
+// This runs after default priority
+transitionService.onBefore({}, callback, { priority: -100 });
+```
+
+**Default**: `0`
+
+**Built-in priorities**:
+- Eager resolve: high priority
+- Lazy resolve: default priority
+- View loading: specific priorities
+
+### bind
+
+Sets the `this` context for the hook callback.
+
+```typescript
+class MyService {
+  check() { return this.isReady; }
+  
+  registerHook(transitionService) {
+    transitionService.onBefore({}, this.check, {
+      bind: this
+    });
+  }
+}
+```
+
+### invokeLimit
+
+Automatically deregisters hook after N invocations.
+
+```typescript
+// Run only once
+transitionService.onSuccess({}, callback, { invokeLimit: 1 });
+
+// Run 5 times then deregister
+transitionService.onStart({}, callback, { invokeLimit: 5 });
+```
+
+## HookResult
+
+The return value from a hook function controls transition behavior.
+
+```typescript
+type HookResult = boolean | TargetState | void | Promise<boolean | TargetState | void>;
+```
+
+### Return Values
+
+#### `false` - Cancel Transition
+
+```typescript
+transitionService.onBefore({}, (trans) => {
+  if (!isValid()) {
+    return false; // Cancels transition
+  }
+});
+```
+
+#### `TargetState` - Redirect Transition
+
+```typescript
+transitionService.onBefore({ to: 'admin.**' }, (trans) => {
+  if (!isAuthenticated()) {
+    // Redirect to login
+    return trans.router.stateService.target('login', {
+      returnTo: trans.to().name
+    });
+  }
+});
+```
+
+#### `Promise` - Async Hook
+
+```typescript
+transitionService.onStart({}, (trans) => {
+  // Transition waits for promise
+  return fetchUserData().then(user => {
+    if (!user.active) {
+      return false; // Cancel if inactive
+    }
+    // Continue transition if active
+  });
+});
+```
+
+#### `void` / `undefined` / `true` - Continue Transition
+
+```typescript
+transitionService.onEnter({}, (trans) => {
+  analytics.track('pageview');
+  // Return nothing = continue
+});
+```
+
+### Promise Resolution
+
+When a hook returns a Promise:
+
+- **Resolves to `false`** → Transition cancelled
+- **Resolves to `TargetState`** → Transition redirected
+- **Resolves to anything else** → Transition continues
+- **Rejects** → Transition cancelled with error
+
+```typescript
+transitionService.onBefore({}, async (trans) => {
+  try {
+    const canProceed = await checkPermission();
+    if (!canProceed) {
+      return trans.router.stateService.target('forbidden');
+    }
+  } catch (error) {
+    // Promise rejection cancels transition
+    throw new Error('Permission check failed');
+  }
+});
+```
+
+## Hook Function Signatures
+
+### TransitionHookFn
+
+For `onBefore`, `onStart`, `onFinish`, `onSuccess`, `onError`.
+
+```typescript
+interface TransitionHookFn {
+  (transition: Transition): HookResult;
+}
+```
+
+**Example**:
+```typescript
+function myHook(transition: Transition): HookResult {
+  const toState = transition.to();
+  const params = transition.params();
+  
+  if (toState.data?.requiresAuth && !isAuthenticated()) {
+    return transition.router.stateService.target('login');
+  }
+}
+
+transitionService.onBefore({}, myHook);
+```
+
+### TransitionStateHookFn
+
+For `onEnter`, `onExit`, `onRetain`.
+
+```typescript
+interface TransitionStateHookFn {
+  (transition: Transition, state: StateDeclaration): HookResult;
+}
+```
+
+**Example**:
+```typescript
+function myStateHook(
+  transition: Transition,
+  state: StateDeclaration
+): HookResult {
+  console.log(`Entering state: ${state.name}`);
+  
+  // Access state-specific data
+  if (state.data?.logAnalytics) {
+    analytics.track(state.name);
+  }
+}
+
+transitionService.onEnter({ entering: 'dashboard' }, myStateHook);
+```
+
+### TransitionCreateHookFn
+
+For `onCreate` (plugin use only).
+
+```typescript
+interface TransitionCreateHookFn {
+  (transition: Transition): void;
+}
+```
+
+## Hook Phases
+
+Hooks execute in specific phases during the transition lifecycle.
+
+```typescript
+enum TransitionHookPhase {
+  CREATE,   // Transition being created
+  BEFORE,   // Before transition starts
+  RUN,      // Main transition execution
+  SUCCESS,  // After successful completion
+  ERROR     // After transition fails
+}
+```
+
+### Phase Details
+
+| Phase | Hooks | Can Cancel? | Can Redirect? | Async? |
+|-------|-------|-------------|---------------|--------|
+| CREATE | onCreate | ✅ | ✅ | ❌ |
+| BEFORE | onBefore | ✅ | ✅ | ✅ |
+| RUN | onStart, onExit, onRetain, onEnter, onFinish | ✅ | ✅ | ✅ |
+| SUCCESS | onSuccess | ❌ | ❌ | ❌ |
+| ERROR | onError | ❌ | ❌ | ❌ |
+
+### RUN Phase Ordering
+
+Within the RUN phase, hooks execute in this order:
+
+1. **onStart** (priority 0)
+2. **onExit** (priority 100, reverse order - children first)
+3. **onRetain** (priority 200)
+4. **onEnter** (priority 300, parent to child)
+5. **onFinish** (priority 400)
+
+## Hook Scope
+
+Hooks have different scopes determining what they match against.
+
+```typescript
+enum TransitionHookScope {
+  TRANSITION,  // Matches transition endpoints only
+  STATE        // Matches all states in path
+}
+```
+
+### TRANSITION Scope
+
+Matches only the tail of the path (final state).
+
+Paths with TRANSITION scope:
+- `to` - destination state
+- `from` - source state
+
+**Example**:
+```typescript
+// Only matches if transitioning TO 'admin'
+{ to: 'admin' }
+
+// Doesn't match transitioning to 'admin.users'
+```
+
+### STATE Scope
+
+Matches each state in the path.
+
+Paths with STATE scope:
+- `entering` - each state being entered
+- `exiting` - each state being exited
+- `retained` - each state being retained
+
+**Example**:
+```typescript
+// Matches when entering 'admin', even if going to 'admin.users'
+{ entering: 'admin' }
+
+// Hook fires for BOTH admin and admin.users states
+```
+
+## Advanced Patterns
+
+### Conditional Default Substate
+
+```typescript
+transitionService.onBefore(
+  {
+    to: (state) => state.defaultSubstate != null
+  },
+  (trans) => {
+    const substate = trans.to().defaultSubstate;
+    return trans.router.stateService.target(substate);
+  }
+);
+```
+
+### Lazy Loading Module
+
+```typescript
+transitionService.onBefore(
+  { to: 'admin.**' },
+  async (trans) => {
+    if (!isModuleLoaded('admin')) {
+      await loadModule('admin');
+    }
+  }
+);
+```
+
+### Parameter Validation
+
+```typescript
+transitionService.onBefore(
+  { to: 'user' },
+  (trans) => {
+    const userId = trans.params().userId;
+    if (!isValidUserId(userId)) {
+      return trans.router.stateService.target('404');
+    }
+  }
+);
+```
+
+### Unsaved Changes Guard
+
+```typescript
+transitionService.onBefore(
+  { from: 'editor' },
+  (trans) => {
+    const editor = trans.injector(null, 'from').get('EditorService');
+    
+    if (editor.hasUnsavedChanges()) {
+      return editor.confirmDiscard().then(confirmed => {
+        return confirmed ? true : false;
+      });
+    }
+  }
+);
+```
+
+### Role-Based Access Control
+
+```typescript
+transitionService.onBefore(
+  {
+    to: (state) => state.data?.requiredRoles != null
+  },
+  (trans) => {
+    const requiredRoles = trans.to().data.requiredRoles;
+    const auth = trans.injector().get('AuthService');
+    
+    if (!auth.hasAnyRole(requiredRoles)) {
+      return trans.router.stateService.target('forbidden');
+    }
+  }
+);
+```
+
+### Analytics Tracking
+
+```typescript
+transitionService.onSuccess({}, (trans) => {
+  analytics.track('pageview', {
+    page: trans.to().name,
+    params: trans.params(),
+    from: trans.from().name,
+    duration: trans.$id // or actual duration
+  });
+});
+```
+
+## Deregistration
+
+All hook registration methods return a deregistration function.
+
+```typescript
+const deregister = transitionService.onBefore({}, callback);
+
+// Remove hook
+deregister();
+```
+
+### Auto-deregistration
+
+```typescript
+// Using invokeLimit
+transitionService.onBefore({}, callback, { invokeLimit: 1 });
+// Automatically deregistered after first invocation
+
+// Manual cleanup
+const dereg = transitionService.onBefore({}, callback);
+scope.$on('$destroy', dereg); // Angular 1 example
+```
+
+## TypeScript Definitions
+
+### Complete Type Reference
+
+```typescript
+// Hook registration function type
+type IHookRegistration = (
+  matchCriteria: HookMatchCriteria,
+  callback: HookFn,
+  options?: HookRegOptions
+) => Function;
+
+// All hook function types
+type HookFn = 
+  | TransitionHookFn 
+  | TransitionStateHookFn 
+  | TransitionCreateHookFn;
+
+// Hook result type
+type HookResult = 
+  | boolean 
+  | TargetState 
+  | void 
+  | Promise<boolean | TargetState | void>;
+
+// Match criterion type
+type HookMatchCriterion = 
+  | string 
+  | boolean 
+  | ((state: StateObject, transition: Transition) => boolean);
+```
+
+## See Also
+
+- [TransitionService](/api/transition-service) - Global hook registration
+- [Transition](/api/transition) - Individual transition API

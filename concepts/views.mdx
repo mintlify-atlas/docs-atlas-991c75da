@@ -1,0 +1,559 @@
+---
+title: "Views"
+description: "View service, named views, nested views, and view synchronization"
+---
+
+# Views
+
+Views connect states to UI components. The [`ViewService`](/api/view-service) manages the pairing of `ui-view` directives with view configurations from states.
+
+## View Basics
+
+### Simple View
+
+The simplest way to define a view is at the state level:
+
+```typescript
+const state = {
+  name: 'home',
+  url: '/home',
+  component: HomeComponent  // or template + controller
+};
+```
+
+### Named Views
+
+States can define multiple named views:
+
+```typescript
+const state = {
+  name: 'home',
+  url: '/home',
+  views: {
+    // Targets <ui-view name="header">
+    header: {
+      component: HeaderComponent
+    },
+    // Targets <ui-view name="content"> or <ui-view> (unnamed)
+    content: {
+      component: HomeContentComponent
+    },
+    // Targets <ui-view name="sidebar">
+    sidebar: {
+      component: SidebarComponent
+    }
+  }
+};
+```
+
+<Note>
+The unnamed view is referred to as `$default` internally.
+</Note>
+
+## View Declaration
+
+From `_ViewDeclaration`:
+
+```typescript
+export interface _ViewDeclaration {
+  /** The raw name for the view declaration */
+  $name?: string;
+  
+  /** The normalized address for the ui-view */
+  $uiViewName?: string;
+  
+  /** The context anchor (state name) */
+  $uiViewContextAnchor?: string;
+  
+  /** A type identifier for the View */
+  $type?: string;
+  
+  /** The context that this view is declared within */
+  $context?: ViewContext;
+}
+```
+
+## Nested Views
+
+Views can be nested inside other views:
+
+```typescript
+const states = [
+  {
+    name: 'app',
+    views: {
+      // Fills the root <ui-view>
+      '$default': {
+        template: `
+          <header ui-view="header"></header>
+          <main ui-view="content"></main>
+        `
+      }
+    }
+  },
+  {
+    name: 'app.home',
+    views: {
+      // Fills <ui-view name="header"> inside app's view
+      'header': {
+        component: HeaderComponent
+      },
+      // Fills <ui-view name="content"> inside app's view
+      'content': {
+        component: HomeComponent
+      }
+    }
+  }
+];
+```
+
+## View Targeting
+
+### Absolute Targeting
+
+Target a view in a specific state using `@` syntax:
+
+```typescript
+const state = {
+  name: 'users.detail',
+  views: {
+    // Targets ui-view in 'users' state
+    'sidebar@users': {
+      component: UsersSidebarComponent
+    },
+    // Targets ui-view in root state
+    'modal@': {
+      component: DetailModalComponent
+    },
+    // Targets ui-view in current state (users.detail)
+    'content': {
+      component: UserDetailComponent
+    }
+  }
+};
+```
+
+### Relative Targeting
+
+Use `^` to target parent state views:
+
+```typescript
+const state = {
+  name: 'app.users.detail',
+  views: {
+    // Targets parent state (app.users)
+    'sidebar@^': {
+      component: SidebarComponent
+    },
+    // Targets grandparent state (app)
+    'header@^.^': {
+      component: HeaderComponent
+    }
+  }
+};
+```
+
+### Dot Notation for Nested Views
+
+```typescript
+const state = {
+  name: 'dashboard',
+  views: {
+    // Targets <ui-view name="panel"> inside <ui-view name="left">
+    'left.panel': {
+      component: LeftPanelComponent
+    }
+  }
+};
+```
+
+## View Service
+
+From [`ViewService`](/api/view-service):
+
+```typescript
+export class ViewService {
+  /**
+   * Deactivates a ViewConfig
+   */
+  deactivateViewConfig(viewConfig: ViewConfig): void;
+  
+  /**
+   * Activates a ViewConfig
+   */
+  activateViewConfig(viewConfig: ViewConfig): void;
+  
+  /**
+   * Syncs ui-view components with view configs
+   */
+  sync(): void;
+  
+  /**
+   * Registers a ui-view component
+   */
+  registerUIView(uiView: ActiveUIView): Function;
+  
+  /**
+   * Returns list of available view names
+   */
+  available(): string[];
+  
+  /**
+   * Returns list of active view names
+   */
+  active(): string[];
+}
+```
+
+## View Lifecycle
+
+### View Registration
+
+When a `ui-view` directive is created, it registers with the ViewService:
+
+```typescript
+// Pseudocode for ui-view directive
+class UIViewDirective {
+  constructor(router: UIRouter) {
+    const uiView: ActiveUIView = {
+      $type: 'ng1',  // or 'ng2', 'react', etc.
+      id: viewId,
+      name: 'content',
+      fqn: '$default.content',
+      creationContext: stateContext,
+      configUpdated: (config) => this.loadView(config)
+    };
+    
+    // Register and get deregister function
+    this.deregister = router.viewService.registerUIView(uiView);
+  }
+  
+  onDestroy() {
+    this.deregister();
+  }
+}
+```
+
+### View Synchronization
+
+From `ViewService.sync()`:
+
+The sync process:
+1. Match each `ui-view` with a `ViewConfig`
+2. Call `configUpdated()` on matched ui-views
+3. The ui-view loads its component/template
+
+```typescript
+// After a transition
+transition.onSuccess({}, () => {
+  router.viewService.sync();
+  // All ui-views update to show new components
+});
+```
+
+## View Matching
+
+From `ViewService.matches()`:
+
+Views are matched by:
+
+1. **Type**: ui-view `$type` must match ViewConfig `$type`
+2. **Name**: ui-view name must match the view config's target name
+3. **Context**: ui-view's creation context must match the view config's anchor
+
+### Matching Example
+
+```typescript
+// DOM structure
+// <ui-view>                           <!-- fqn: "$default", context: "" -->
+//   <ui-view name="sidebar">          <!-- fqn: "$default.sidebar", context: "app" -->
+//     <ui-view name="panel">          <!-- fqn: "$default.sidebar.panel", context: "app.users" -->
+//     </ui-view>
+//   </ui-view>
+// </ui-view>
+
+const state = {
+  name: 'app.users',
+  views: {
+    // Matches: fqn "$default.sidebar.panel", context "app.users"
+    'panel@app.users': {
+      component: PanelComponent
+    },
+    // Also matches the same ui-view
+    'sidebar.panel@app': {
+      component: PanelComponent
+    }
+  }
+};
+```
+
+## View Config
+
+From `ViewConfig`:
+
+```typescript
+export interface ViewConfig {
+  /** Unique id */
+  $id: number;
+  
+  /** The normalized view declaration */
+  viewDecl: _ViewDeclaration;
+  
+  /** The node the ViewConfig is bound to */
+  path: PathNode[];
+  
+  /** Is loaded */
+  loaded: boolean;
+  
+  /** Load templates, components, etc */
+  load(): Promise<ViewConfig>;
+}
+```
+
+### Loading Views
+
+ViewConfigs have a `load()` method that:
+- Fetches templates (if templateProvider/templateUrl)
+- Resolves controllers (if controllerProvider)
+- Lazy loads components
+
+```typescript
+// Framework implementations provide the load() logic
+class MyViewConfig implements ViewConfig {
+  async load() {
+    if (this.viewDecl.templateUrl) {
+      this.template = await fetch(this.viewDecl.templateUrl);
+    }
+    
+    if (this.viewDecl.component) {
+      this.component = await import(this.viewDecl.component);
+    }
+    
+    return this;
+  }
+}
+```
+
+## Active UIView
+
+From `ActiveUIView`:
+
+```typescript
+export interface ActiveUIView {
+  /** Framework type */
+  $type: string;
+  
+  /** Auto-incremented id */
+  id: number;
+  
+  /** The ui-view short name */
+  name: string;
+  
+  /** Fully qualified name */
+  fqn: string;
+  
+  /** Currently loaded ViewConfig */
+  config: ViewConfig;
+  
+  /** State context where ui-view was created */
+  creationContext: ViewContext;
+  
+  /** Callback to apply ViewConfig */
+  configUpdated: (config: ViewConfig) => void;
+}
+```
+
+## View Context
+
+From `ViewContext`:
+
+```typescript
+export interface ViewContext {
+  /** State name */
+  name: string;
+  
+  /** Parent context */
+  parent: ViewContext;
+}
+```
+
+The context determines which state a ui-view belongs to:
+
+```typescript
+// In state 'app'
+const appContext: ViewContext = { name: 'app', parent: rootContext };
+
+// A ui-view created in 'app' state's template
+const uiView: ActiveUIView = {
+  // ...
+  creationContext: appContext
+};
+```
+
+## Multiple Named Views Example
+
+```typescript
+const states = [
+  {
+    name: 'app',
+    template: `
+      <ui-view name="header"></ui-view>
+      <ui-view name="sidebar"></ui-view>
+      <ui-view name="content"></ui-view>
+      <ui-view name="footer"></ui-view>
+    `
+  },
+  {
+    name: 'app.dashboard',
+    views: {
+      'header@app': {
+        component: DashboardHeaderComponent
+      },
+      'sidebar@app': {
+        component: DashboardSidebarComponent
+      },
+      'content@app': {
+        component: DashboardContentComponent
+      },
+      'footer@app': {
+        component: DashboardFooterComponent
+      }
+    }
+  },
+  {
+    name: 'app.settings',
+    views: {
+      // Different components for same view slots
+      'header@app': {
+        component: SettingsHeaderComponent
+      },
+      'content@app': {
+        component: SettingsContentComponent
+      }
+      // sidebar and footer not defined - keep previous
+    }
+  }
+];
+```
+
+## View Normalization
+
+From `ViewService.normalizeUIViewTarget()`:
+
+View names are normalized:
+
+```typescript
+// Raw name -> Normalized
+'sidebar'           -> { uiViewName: 'sidebar', uiViewContextAnchor: '^' }
+'sidebar@app'       -> { uiViewName: 'sidebar', uiViewContextAnchor: 'app' }
+'@app'              -> { uiViewName: '$default', uiViewContextAnchor: 'app' }
+'!sidebar'          -> { uiViewName: 'sidebar', uiViewContextAnchor: '' }
+'^.^.sidebar'       -> { uiViewName: 'sidebar', uiViewContextAnchor: '^.^' }
+'left.panel@app'    -> { uiViewName: 'left.panel', uiViewContextAnchor: 'app' }
+```
+
+## Querying Views
+
+```typescript
+// Get available ui-view names
+const available = router.viewService.available();
+console.log(available); // ['$default', 'header', 'sidebar', 'content']
+
+// Get active ui-view names (with loaded content)
+const active = router.viewService.active();
+console.log(active); // ['header', 'content']
+
+// Get views for a transition
+transitionService.onEnter({ entering: '**' }, (trans) => {
+  const enteringViews = trans.views('entering');
+  console.log('Loading views:', enteringViews);
+});
+```
+
+## View Plugins
+
+Framework integrations provide view plugins:
+
+```typescript
+// Register view config factory
+router.viewService._pluginapi._viewConfigFactory(
+  'ng1',  // View type
+  (path, decl) => new Ng1ViewConfig(path, decl)
+);
+
+// Listen for view sync events
+router.viewService._pluginapi._onSync((viewTuples) => {
+  viewTuples.forEach(({ uiView, viewConfig }) => {
+    console.log('Syncing:', uiView.fqn, 'with', viewConfig);
+  });
+});
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use named views for complex layouts">
+    ```typescript
+    // Good: Clear, maintainable
+    views: {
+      'header@app': { component: HeaderComponent },
+      'sidebar@app': { component: SidebarComponent },
+      'content@app': { component: ContentComponent }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Keep view targeting simple">
+    ```typescript
+    // Good: Relative to current state
+    views: {
+      'sidebar': { component: SidebarComponent }
+    }
+    
+    // Avoid: Overly complex targeting
+    views: {
+      '^.^.sidebar@^.^.^': { component: SidebarComponent }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Use absolute targeting for shared layouts">
+    ```typescript
+    views: {
+      // Always targets root ui-view
+      'modal@': { component: ModalComponent }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Group related views under abstract states">
+    ```typescript
+    {
+      name: 'app',
+      abstract: true,
+      template: '<ui-view name="header"></ui-view><ui-view></ui-view>'
+    }
+    // All child states can target these views
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="States" icon="circle-nodes" href="/concepts/states">
+    Define view configurations in states
+  </Card>
+  
+  <Card title="State Tree" icon="folder-tree" href="/concepts/state-tree">
+    Understand nested view contexts
+  </Card>
+  
+  <Card title="Transitions" icon="arrows-turn-right" href="/concepts/transitions">
+    View updates during transitions
+  </Card>
+  
+  <Card title="Hooks" icon="hook" href="/concepts/hooks">
+    Hook into view lifecycle
+  </Card>
+</CardGroup>

@@ -1,0 +1,308 @@
+---
+title: Plugin Architecture
+description: Build custom plugins to extend UI-Router Core functionality
+---
+
+## Overview
+
+UI-Router's plugin architecture allows you to extend and customize router behavior using the public API. Plugins are classes or factory functions that receive the UIRouter instance and can hook into any aspect of the routing lifecycle.
+
+## UIRouterPlugin Interface
+
+All plugins must implement the `UIRouterPlugin` interface:
+
+```typescript
+export interface UIRouterPlugin extends Disposable {
+  name: string;
+}
+
+export interface Disposable {
+  /** Instructs the Disposable to clean up any resources */
+  dispose(router?: UIRouter): void;
+}
+```
+
+### Required Properties
+
+- **`name`**: A unique identifier for your plugin. Used to retrieve the plugin instance later via `router.getPlugin(name)`.
+
+### Required Methods
+
+- **`dispose(router)`**: Called when the router is disposed. Clean up event listeners, timers, or other resources here.
+
+## Creating a Plugin
+
+Plugins can be implemented as ES6 classes, constructor functions, or factory functions.
+
+### ES6 Class Plugin
+
+```typescript
+import { UIRouterPlugin, UIRouter, Transition } from '@uirouter/core';
+
+export class MyAuthPlugin implements UIRouterPlugin {
+  name = 'MyAuthPlugin';
+
+  constructor(router: UIRouter, options: any) {
+    const $transitions = router.transitionService;
+    const $state = router.stateService;
+
+    // Define criteria for states requiring authentication
+    const authCriteria = {
+      to: (state) => state.data && state.data.requiresAuth
+    };
+
+    // Hook function to check authentication
+    function authHook(transition: Transition) {
+      const authService = transition.injector().get('AuthService');
+      if (!authService.isAuthenticated()) {
+        return $state.target('login');
+      }
+    }
+
+    // Register the transition hook
+    this.deregister = $transitions.onStart(authCriteria, authHook);
+  }
+
+  dispose(router: UIRouter) {
+    // Clean up the transition hook
+    this.deregister && this.deregister();
+  }
+
+  private deregister: Function;
+}
+```
+
+### Factory Function Plugin
+
+```typescript
+export function myLoggingPlugin(router: UIRouter, options: any) {
+  const plugin: UIRouterPlugin = {
+    name: 'LoggingPlugin',
+    
+    dispose(router: UIRouter) {
+      deregisterHook();
+    }
+  };
+
+  const deregisterHook = router.transitionService.onBefore({}, (transition) => {
+    console.log(`Transition from ${transition.from().name} to ${transition.to().name}`);
+  });
+
+  return plugin;
+}
+```
+
+## Registering Plugins
+
+Use the `router.plugin()` method to register your plugin:
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+import { MyAuthPlugin } from './plugins/auth';
+
+const router = new UIRouter();
+
+// Register plugin with options
+const authPlugin = router.plugin(MyAuthPlugin, { 
+  loginState: 'login',
+  redirectParam: 'returnTo' 
+});
+```
+
+## Plugin Registration Internals
+
+The `UIRouter.plugin()` method (from src/router.ts:188):
+
+```typescript
+plugin<T extends UIRouterPlugin>(plugin: any, options: any = {}): T {
+  const pluginInstance = new plugin(this, options);
+  if (!pluginInstance.name) {
+    throw new Error('Required property `name` missing on plugin: ' + pluginInstance);
+  }
+  this._disposables.push(pluginInstance);
+  return (this._plugins[pluginInstance.name] = pluginInstance);
+}
+```
+
+### Key behaviors:
+
+1. Instantiates the plugin with the router instance and options
+2. Validates that the plugin has a `name` property
+3. Registers the plugin as a disposable resource
+4. Stores the plugin in the internal registry
+5. Returns the plugin instance
+
+## Retrieving Plugins
+
+Get a registered plugin by name:
+
+```typescript
+// Get specific plugin
+const authPlugin = router.getPlugin('MyAuthPlugin');
+
+// Get all plugins
+const allPlugins = router.getPlugin();
+```
+
+## UIRouterPluginBase
+
+For convenience, extend the base class which provides default implementations:
+
+```typescript
+import { UIRouterPluginBase, UIRouter } from '@uirouter/core';
+
+export class MyPlugin extends UIRouterPluginBase {
+  name = 'MyPlugin';
+
+  constructor(router: UIRouter, options: any) {
+    super();
+    // Plugin initialization
+  }
+
+  // dispose() is already implemented in the base class
+  // Override if you need custom cleanup
+}
+```
+
+The base class (from src/interface.ts:110-113):
+
+```typescript
+export abstract class UIRouterPluginBase implements UIRouterPlugin, Disposable {
+  abstract name: string;
+  dispose(router: UIRouter) {}
+}
+```
+
+## Plugin Use Cases
+
+### Transition Analytics
+
+```typescript
+export class AnalyticsPlugin implements UIRouterPlugin {
+  name = 'AnalyticsPlugin';
+  
+  constructor(router: UIRouter, options: { trackingId: string }) {
+    this.deregister = router.transitionService.onSuccess({}, (transition) => {
+      const toState = transition.to();
+      analytics.pageview(toState.url, toState.name);
+    });
+  }
+  
+  dispose() {
+    this.deregister();
+  }
+  
+  private deregister: Function;
+}
+```
+
+### State Loading Indicator
+
+```typescript
+export class LoadingPlugin implements UIRouterPlugin {
+  name = 'LoadingPlugin';
+  private deregisterStart: Function;
+  private deregisterFinish: Function;
+  
+  constructor(router: UIRouter, options: any) {
+    this.deregisterStart = router.transitionService.onStart({}, () => {
+      document.body.classList.add('loading');
+    });
+    
+    this.deregisterFinish = router.transitionService.onFinish({}, () => {
+      document.body.classList.remove('loading');
+    });
+  }
+  
+  dispose() {
+    this.deregisterStart();
+    this.deregisterFinish();
+  }
+}
+```
+
+### Custom URL Matching
+
+```typescript
+export class CustomMatcherPlugin implements UIRouterPlugin {
+  name = 'CustomMatcherPlugin';
+  
+  constructor(router: UIRouter, options: any) {
+    // Register custom parameter type
+    router.urlMatcherFactory.type('customType', {
+      encode: (val) => val.toString(),
+      decode: (str) => parseInt(str, 10),
+      is: (val) => typeof val === 'number',
+      pattern: /\d+/
+    });
+  }
+  
+  dispose() {
+    // Cleanup if needed
+  }
+}
+```
+
+## Accessing Router Services
+
+Plugins have full access to all router services:
+
+```typescript
+constructor(router: UIRouter, options: any) {
+  // State management
+  router.stateRegistry.register(stateDeclaration);
+  router.stateService.go('stateName');
+  
+  // Transitions
+  router.transitionService.onBefore({}, hookFn);
+  
+  // URL handling
+  router.urlService.url();
+  router.urlMatcherFactory.compile('/path/:id');
+  
+  // Views
+  router.viewService._pluginapi._registeredUIViews();
+  
+  // Global state
+  router.globals.current; // Current state
+  router.globals.params;  // Current params
+  
+  // Tracing
+  router.trace.enable('TRANSITION');
+}
+```
+
+## Best Practices
+
+1. **Always provide a unique `name`** - Required for plugin registration
+2. **Implement `dispose()` properly** - Clean up all resources to prevent memory leaks
+3. **Store deregistration functions** - Keep references to hook deregistration functions
+4. **Validate options** - Check that required options are provided in the constructor
+5. **Use TypeScript** - Leverage type safety for better plugin development
+6. **Document your plugin** - Provide clear documentation for configuration options
+7. **Make plugins reusable** - Design plugins to work across different applications
+
+## Distribution
+
+Package your plugin as an npm module:
+
+```json
+{
+  "name": "uirouter-plugin-auth",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "peerDependencies": {
+    "@uirouter/core": "^6.0.0"
+  }
+}
+```
+
+Users can then install and use it:
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+import { MyAuthPlugin } from 'uirouter-plugin-auth';
+
+const router = new UIRouter();
+router.plugin(MyAuthPlugin, { loginState: 'login' });
+```

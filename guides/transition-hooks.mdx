@@ -1,0 +1,557 @@
+---
+title: Transition Hooks
+description: Complete guide to registering and using transition hooks for authentication, logging, validation, and lifecycle management in UI-Router Core
+---
+
+# Transition Hooks
+
+Transition hooks allow you to tap into the state transition lifecycle. Use them for authentication, authorization, logging, validation, and data preparation.
+
+## Hook Types
+
+UI-Router provides several hook types that fire at different points in the transition lifecycle:
+
+```typescript
+transitionService.onCreate()   // When transition is created
+transitionService.onBefore()   // Before transition starts
+transitionService.onStart()    // Transition starts
+transitionService.onExit()     // State is being exited
+transitionService.onRetain()   // State is being retained
+transitionService.onEnter()    // State is being entered
+transitionService.onFinish()   // Transition finishing
+transitionService.onSuccess()  // Transition succeeded
+transitionService.onError()    // Transition failed
+```
+
+## Hook Lifecycle
+
+Hooks execute in this order during a transition:
+
+<Steps>
+
+### onCreate
+Transition object is created (synchronous)
+
+### onBefore
+Before transition starts - can cancel or redirect
+
+### onStart
+Transition begins execution
+
+### onExit
+States being exited (reverse order, child to parent)
+
+### onRetain
+States being retained
+
+### onEnter
+States being entered (parent to child order)
+
+### onFinish
+Transition is finishing
+
+### onSuccess or onError
+Transition completed successfully or with error
+
+</Steps>
+
+## Registering Hooks
+
+### Basic Hook Registration
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+
+const router = new UIRouter();
+const transitionService = router.transitionService;
+
+// Register a hook
+transitionService.onStart({}, (transition) => {
+  console.log('Transition started to:', transition.to().name);
+});
+```
+
+### Hook Criteria
+
+Target specific transitions using criteria:
+
+```typescript
+// Match specific state
+transitionService.onEnter({ entering: 'dashboard' }, (transition) => {
+  console.log('Entering dashboard');
+});
+
+// Match multiple states
+transitionService.onEnter({ entering: ['users', 'admin'] }, (transition) => {
+  console.log('Entering users or admin');
+});
+
+// Match state pattern (glob)
+transitionService.onEnter({ entering: 'admin.**' }, (transition) => {
+  console.log('Entering any admin state');
+});
+
+// Match by state property
+transitionService.onBefore({ to: (state) => state.data?.requiresAuth }, (transition) => {
+  // Check authentication
+});
+```
+
+### Deregistering Hooks
+
+```typescript
+// Hook registration returns a deregistration function
+const deregister = transitionService.onStart({}, (transition) => {
+  console.log('Hook called');
+});
+
+// Call to remove hook
+deregister();
+```
+
+## Hook Return Values
+
+Hook return values control transition behavior:
+
+### Continue Transition
+
+```typescript
+// Return nothing/undefined - continue
+transitionService.onBefore({}, (transition) => {
+  console.log('Logging transition');
+  // No return - transition continues
+});
+
+// Return true - continue
+transitionService.onBefore({}, (transition) => {
+  return true;
+});
+```
+
+### Cancel Transition
+
+```typescript
+// Return false - cancel transition
+transitionService.onBefore({}, (transition) => {
+  if (someCondition) {
+    return false;  // Abort transition
+  }
+});
+```
+
+### Redirect Transition
+
+```typescript
+import { TargetState } from '@uirouter/core';
+
+// Return TargetState to redirect
+transitionService.onBefore({}, (transition) => {
+  if (!isAuthenticated()) {
+    return transition.router.stateService.target('login');
+  }
+});
+
+// Return state name (string)
+transitionService.onBefore({}, (transition) => {
+  if (needsOnboarding()) {
+    return 'onboarding';
+  }
+});
+```
+
+### Async Hooks
+
+```typescript
+// Return promise
+transitionService.onBefore({}, async (transition) => {
+  const authenticated = await checkAuth();
+  
+  if (!authenticated) {
+    return transition.router.stateService.target('login');
+  }
+});
+```
+
+## Common Hook Patterns
+
+### Authentication Hook
+
+```typescript
+transitionService.onBefore(
+  { to: (state) => state.data?.requiresAuth },
+  async (transition) => {
+    const authService = transition.injector().get('AuthService');
+    const authenticated = await authService.isAuthenticated();
+    
+    if (!authenticated) {
+      return transition.router.stateService.target('login', {}, {
+        location: false  // Don't update URL for redirect
+      });
+    }
+  }
+);
+```
+
+### Authorization Hook
+
+```typescript
+transitionService.onBefore(
+  { to: (state) => state.data?.roles },
+  async (transition) => {
+    const requiredRoles = transition.to().data.roles;
+    const authService = transition.injector().get('AuthService');
+    const userRoles = await authService.getUserRoles();
+    
+    const hasPermission = requiredRoles.some(role => 
+      userRoles.includes(role)
+    );
+    
+    if (!hasPermission) {
+      return transition.router.stateService.target('unauthorized');
+    }
+  }
+);
+```
+
+### Logging Hook
+
+```typescript
+// Log all transitions
+transitionService.onStart({}, (transition) => {
+  console.log('Navigating from', transition.from().name, 
+              'to', transition.to().name);
+});
+
+// Log successful transitions
+transitionService.onSuccess({}, (transition) => {
+  const duration = transition.time() || 0;
+  console.log('Transition completed in', duration, 'ms');
+  
+  // Analytics
+  analytics.pageView(transition.to().name, {
+    from: transition.from().name,
+    params: transition.params()
+  });
+});
+
+// Log failed transitions
+transitionService.onError({}, (transition) => {
+  console.error('Transition failed:', transition.error());
+});
+```
+
+### Unsaved Changes Hook
+
+```typescript
+transitionService.onBefore({}, (transition) => {
+  const fromState = transition.from();
+  
+  // Check if form has unsaved changes
+  if (fromState.data?.checkUnsaved) {
+    const formService = transition.injector().get('FormService');
+    
+    if (formService.hasUnsavedChanges()) {
+      const confirmed = window.confirm(
+        'You have unsaved changes. Do you want to leave?'
+      );
+      
+      if (!confirmed) {
+        return false;  // Cancel transition
+      }
+    }
+  }
+});
+```
+
+### Loading State Hook
+
+```typescript
+transitionService.onStart({}, (transition) => {
+  const loadingService = transition.injector().get('LoadingService');
+  loadingService.show();
+});
+
+transitionService.onFinish({}, (transition) => {
+  const loadingService = transition.injector().get('LoadingService');
+  loadingService.hide();
+});
+```
+
+### Page Title Hook
+
+```typescript
+transitionService.onSuccess({}, (transition) => {
+  const toState = transition.to();
+  const pageTitle = toState.data?.pageTitle || toState.name;
+  document.title = `My App - ${pageTitle}`;
+});
+```
+
+### Breadcrumb Hook
+
+```typescript
+transitionService.onSuccess({}, (transition) => {
+  const breadcrumbService = transition.injector().get('BreadcrumbService');
+  
+  // Build breadcrumb from state path
+  const breadcrumbs = transition.treeChanges().to
+    .filter(node => node.state.data?.breadcrumb)
+    .map(node => ({
+      label: node.state.data.breadcrumb,
+      state: node.state.name,
+      params: node.paramValues
+    }));
+  
+  breadcrumbService.setBreadcrumbs(breadcrumbs);
+});
+```
+
+## State-Specific Hooks
+
+Some hooks fire for specific states:
+
+### onEnter Hook
+
+Fires when entering a state:
+
+```typescript
+transitionService.onEnter({ entering: 'dashboard' }, (transition, state) => {
+  console.log('Entering state:', state.name);
+  
+  // Access state-specific data
+  const data = state.data;
+  
+  // Access parameters
+  const params = transition.params();
+});
+```
+
+### onExit Hook
+
+Fires when exiting a state:
+
+```typescript
+transitionService.onExit({ exiting: 'editor' }, (transition, state) => {
+  console.log('Exiting state:', state.name);
+  
+  // Cleanup
+  const editorService = transition.injector().get('EditorService');
+  editorService.cleanup();
+});
+```
+
+### onRetain Hook
+
+Fires when a state is retained (stays active):
+
+```typescript
+transitionService.onRetain({ retained: 'app' }, (transition, state) => {
+  console.log('State retained:', state.name);
+  
+  // Update only if params changed
+  const fromParams = transition.params('from');
+  const toParams = transition.params('to');
+  
+  if (fromParams.query !== toParams.query) {
+    // Update search results
+  }
+});
+```
+
+## Inline State Hooks
+
+Define hooks directly in state declarations:
+
+```typescript
+router.stateRegistry.register({
+  name: 'analytics',
+  url: '/analytics',
+  
+  onEnter: (transition, state) => {
+    console.log('Entering analytics state');
+    // Track page view
+  },
+  
+  onExit: (transition, state) => {
+    console.log('Exiting analytics state');
+    // Clean up
+  },
+  
+  onRetain: (transition, state) => {
+    console.log('Analytics state retained');
+  }
+});
+```
+
+## Accessing Services in Hooks
+
+Use the transition's injector to access services:
+
+```typescript
+transitionService.onBefore({}, (transition) => {
+  // Get service from injector
+  const authService = transition.injector().get('AuthService');
+  const userData = authService.getUserData();
+  
+  // Get native injector (framework-specific)
+  const nativeInjector = transition.injector().native;
+});
+```
+
+## Transition Object API
+
+The transition object provides information about the transition:
+
+```typescript
+transitionService.onStart({}, (transition) => {
+  // States
+  const fromState = transition.from();  // Source state
+  const toState = transition.to();      // Destination state
+  
+  // Parameters
+  const params = transition.params();         // All params
+  const toParams = transition.params('to');   // Destination params
+  const fromParams = transition.params('from'); // Source params
+  
+  // Tree changes
+  const changes = transition.treeChanges();
+  console.log('Entering:', changes.entering);
+  console.log('Exiting:', changes.exiting);
+  console.log('Retained:', changes.retained);
+  
+  // Options
+  const options = transition.options();
+  console.log('Custom data:', options.custom);
+  
+  // Services
+  const injector = transition.injector();
+  const router = transition.router;
+  
+  // Transition ID
+  const id = transition.$id;
+});
+```
+
+## Hook Priorities
+
+Control hook execution order:
+
+```typescript
+// Higher priority executes first
+transitionService.onBefore({}, hookFunction, { priority: 10 });
+
+// Lower priority executes later
+transitionService.onBefore({}, anotherHook, { priority: 5 });
+
+// Default priority is 0
+transitionService.onBefore({}, defaultHook);
+```
+
+## Error Handling
+
+Handle errors in hooks:
+
+```typescript
+transitionService.onBefore({}, async (transition) => {
+  try {
+    const data = await someAsyncOperation();
+    return data.isValid ? true : false;
+  } catch (error) {
+    console.error('Hook error:', error);
+    // Returning false cancels transition
+    return false;
+  }
+});
+
+// Global error handler
+transitionService.onError({}, (transition) => {
+  const error = transition.error();
+  console.error('Transition error:', error);
+  
+  // Handle specific error types
+  if (error.type === RejectType.ABORTED) {
+    console.log('User cancelled transition');
+  }
+});
+```
+
+## Best Practices
+
+<Steps>
+
+### Use specific hook criteria
+
+```typescript
+// Good - specific targeting
+transitionService.onBefore({ to: 'admin.**' }, authHook);
+
+// Avoid - runs for all transitions
+transitionService.onBefore({}, authHook);
+```
+
+### Return promises for async operations
+
+```typescript
+// Good
+transitionService.onBefore({}, async (transition) => {
+  await checkPermissions();
+});
+
+// Avoid - not waiting for async
+transitionService.onBefore({}, (transition) => {
+  checkPermissions();  // Returns promise but not awaited
+});
+```
+
+### Use state data for hook metadata
+
+```typescript
+// In state
+data: { requiresAuth: true, roles: ['admin'] }
+
+// In hook
+transitionService.onBefore(
+  { to: (state) => state.data?.requiresAuth },
+  authHook
+);
+```
+
+### Keep hooks focused
+
+```typescript
+// Good - single responsibility
+transitionService.onBefore({}, authHook);
+transitionService.onBefore({}, loggingHook);
+
+// Avoid - multiple responsibilities
+transitionService.onBefore({}, (transition) => {
+  checkAuth();
+  logTransition();
+  validateParams();
+  updateAnalytics();
+});
+```
+
+### Clean up in onExit hooks
+
+```typescript
+transitionService.onExit({ exiting: 'editor' }, (transition) => {
+  // Clean up resources
+  clearInterval(autoSaveTimer);
+  unsubscribeFromEvents();
+});
+```
+
+</Steps>
+
+## Related Documentation
+
+- [State Configuration](/guides/state-configuration) - Define inline hooks
+- [Navigation](/guides/navigation) - Control navigation with hooks
+- [Resolve](/guides/resolve) - Load data before transitions
+
+## API Reference
+
+- [TransitionService](/api/transition-service) - Hook registration methods
+- [Transition](/api/transition) - Transition object API
+- [TransitionHooks](/api/transition-hooks) - Hook targeting criteria and function signatures

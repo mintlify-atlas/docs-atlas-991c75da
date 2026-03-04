@@ -1,0 +1,518 @@
+---
+title: Navigation
+description: Programmatic navigation between states using StateService in UI-Router Core
+---
+
+# Navigation
+
+UI-Router provides powerful APIs for navigating between states programmatically. This guide covers all navigation methods and options.
+
+## StateService Overview
+
+The `StateService` (located at `router.stateService`) is the primary API for navigation:
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+
+const router = new UIRouter();
+const stateService = router.stateService;
+
+// Navigate to a state
+stateService.go('home');
+```
+
+## Basic Navigation with go()
+
+The `go()` method is the recommended way to navigate:
+
+```typescript
+// Navigate to a state by name
+stateService.go('home');
+
+// Navigate with parameters
+stateService.go('user', { userId: 123 });
+
+// Navigate with options
+stateService.go('search', { query: 'test' }, {
+  reload: true,
+  inherit: false
+});
+```
+
+### Method Signature
+
+```typescript
+go(to: StateOrName, params?: RawParams, options?: TransitionOptions): Promise<StateObject>
+```
+
+## Navigation Options
+
+The `TransitionOptions` object controls navigation behavior:
+
+### Location - Update Browser URL
+
+```typescript
+// Update URL (default)
+stateService.go('home', {}, { location: true });
+
+// Don't update URL
+stateService.go('modal', {}, { location: false });
+
+// Replace current history entry
+stateService.go('home', {}, { location: 'replace' });
+```
+
+### Inherit - Parameter Inheritance
+
+```typescript
+// Inherit current parameters (default for go())
+stateService.go('user.details', { tab: 'profile' }, {
+  inherit: true  // userId from current state is preserved
+});
+
+// Don't inherit parameters
+stateService.go('user.details', { userId: 456 }, {
+  inherit: false  // Only userId: 456 is used
+});
+```
+
+### Reload - Force State Reload
+
+```typescript
+// Reload the target state and all parents
+stateService.go('dashboard', {}, { reload: true });
+
+// Reload from a specific state
+stateService.go('user.profile.settings', {}, {
+  reload: 'user.profile'  // Reload profile and children
+});
+
+// No reload (default)
+stateService.go('user', { userId: 123 }, { reload: false });
+```
+
+### Relative - Relative Navigation
+
+```typescript
+// Navigate relative to current state
+stateService.go('^', {}, { relative: stateService.$current });
+
+// Navigate relative to a specific state
+stateService.go('.child', {}, { relative: 'parent' });
+```
+
+### Custom - Custom Data
+
+```typescript
+// Pass custom data through transition
+stateService.go('page', {}, {
+  custom: {
+    animation: 'slide',
+    source: 'navigation-menu'
+  }
+});
+
+// Access in transition hooks
+transitionService.onStart({}, (transition) => {
+  console.log(transition.options().custom);
+});
+```
+
+### Supercede - Control Transition Cancellation
+
+```typescript
+// Cancel existing transition (default)
+stateService.go('home', {}, { supercede: true });
+
+// Don't cancel, ignore this navigation if one is in progress
+stateService.go('home', {}, { supercede: false });
+```
+
+## Relative Navigation
+
+Navigate relative to the current state using special syntax:
+
+```typescript
+// Current state: 'app.users.list'
+
+// Go to parent state: 'app.users'
+stateService.go('^');
+
+// Go to sibling state: 'app.users.detail'
+stateService.go('^.detail', { userId: 123 });
+
+// Go to child state: 'app.users.list.filters'
+stateService.go('.filters');
+
+// Go up two levels: 'app'
+stateService.go('^^');
+```
+
+## Handling Navigation Results
+
+The `go()` method returns a promise:
+
+<Steps>
+
+### Handle successful navigation
+
+```typescript
+stateService.go('user', { userId: 123 })
+  .then((state) => {
+    console.log('Navigated to:', state.name);
+  });
+```
+
+### Handle navigation errors
+
+```typescript
+stateService.go('protected')
+  .catch((error) => {
+    if (error.type === RejectType.ABORTED) {
+      console.log('Navigation aborted by hook');
+    } else {
+      console.error('Navigation error:', error);
+    }
+  });
+```
+
+### Access the transition object
+
+```typescript
+const promise = stateService.go('dashboard');
+const transition = promise.transition;
+
+console.log('From:', transition.from().name);
+console.log('To:', transition.to().name);
+```
+
+</Steps>
+
+## Low-Level Navigation with transitionTo()
+
+For advanced use cases, use `transitionTo()` directly:
+
+```typescript
+// transitionTo() doesn't set default options like go() does
+stateService.transitionTo('home', { userId: 123 }, {
+  location: true,
+  inherit: false,
+  relative: null,
+  reload: false
+});
+```
+
+**When to use transitionTo():**
+- When you need full control over options
+- When building custom navigation wrappers
+- In low-level framework integrations
+
+**Prefer go() for:**
+- Normal application navigation
+- Default parameter inheritance
+- Relative state paths
+
+## Reloading States
+
+Force reload of the current state:
+
+```typescript
+// Reload current state
+stateService.reload();
+
+// Reload from specific state
+stateService.reload('parent.child');
+
+// Equivalent to:
+stateService.transitionTo(
+  stateService.current,
+  stateService.params,
+  { reload: true, inherit: false, notify: false }
+);
+```
+
+## Creating Target States
+
+Create a `TargetState` object for advanced scenarios:
+
+```typescript
+const target = stateService.target('user', { userId: 123 }, {
+  reload: true
+});
+
+if (target.valid()) {
+  stateService.go(target.state(), target.params(), target.options());
+}
+```
+
+Useful for:
+- Validation before navigation
+- Redirects in transition hooks
+- Building navigation history
+
+## URL-Based Navigation
+
+Navigate using URLs via the `UrlService`:
+
+```typescript
+const urlService = router.urlService;
+
+// Set URL and trigger state activation
+urlService.url('/users/123');
+
+// Update URL without triggering navigation
+urlService.url('/users/123', false);
+
+// Get current URL
+const currentUrl = urlService.url();
+```
+
+### URL Parts
+
+```typescript
+// Get URL components
+const parts = urlService.parts();
+console.log(parts.path);    // '/users/123'
+console.log(parts.search);  // { query: 'test' }
+console.log(parts.hash);    // 'section'
+
+// Update path
+urlService.path('/new-path');
+
+// Update query params
+urlService.search({ page: 2, sort: 'name' });
+
+// Update hash
+urlService.hash('top');
+```
+
+## Checking Current State
+
+### is() - Exact State Match
+
+Check if a specific state is currently active:
+
+```typescript
+// Current state: 'user.profile'
+
+stateService.is('user.profile');  // true
+stateService.is('user');          // false (not exact match)
+
+// With parameter check
+stateService.is('user.profile', { userId: 123 });  // true if userId is 123
+```
+
+### includes() - Hierarchical Match
+
+Check if current state equals or is a child of a state:
+
+```typescript
+// Current state: 'user.profile.settings'
+
+stateService.includes('user');                    // true
+stateService.includes('user.profile');            // true
+stateService.includes('user.profile.settings');   // true
+stateService.includes('admin');                   // false
+
+// Glob patterns
+stateService.includes('**.settings');             // true
+stateService.includes('user.**');                 // true
+```
+
+## Generating URLs
+
+Generate URLs for states without navigating:
+
+```typescript
+// Generate URL for a state
+const url = stateService.href('user', { userId: 123 });
+// Returns: '/users/123'
+
+// With options
+const url = stateService.href('user', { userId: 456 }, {
+  absolute: true,    // Include protocol and host
+  inherit: true,     // Inherit current parameters
+  lossy: true        // Use first ancestor with URL if state has none
+});
+// Returns: 'https://example.com/users/456'
+
+// Returns null if state has no URL
+const url = stateService.href('abstract-state');
+// Returns: null
+```
+
+## Accessing State Information
+
+### Current State
+
+```typescript
+// Get current state declaration
+const current = stateService.current;
+console.log(current.name);  // 'user.profile'
+
+// Get current parameters
+const params = stateService.params;
+console.log(params.userId);  // 123
+
+// Get current transition
+const transition = stateService.transition;
+if (transition) {
+  console.log('Transition in progress');
+}
+```
+
+### State Lookup
+
+```typescript
+// Get state declaration by name
+const state = stateService.get('user.profile');
+
+// Get all states
+const allStates = stateService.get();
+
+// Get state relative to another
+const state = stateService.get('.child', 'parent');
+```
+
+## Navigation Examples
+
+### Example 1: Tab Navigation
+
+```typescript
+function navigateToTab(tabName: string) {
+  return stateService.go('dashboard', { tab: tabName }, {
+    inherit: true,     // Keep other params
+    location: true,    // Update URL
+    reload: false      // Don't reload state
+  });
+}
+
+// Usage
+navigateToTab('analytics');  // /dashboard?tab=analytics
+```
+
+### Example 2: Pagination
+
+```typescript
+function goToPage(page: number) {
+  return stateService.go('.', { page }, {
+    inherit: true,
+    location: 'replace',  // Replace history entry
+    notify: false         // Don't trigger hooks
+  });
+}
+
+// Usage
+goToPage(3);  // Update ?page=3 in URL
+```
+
+### Example 3: Modal Navigation
+
+```typescript
+function openModal(modalName: string, data: any) {
+  return stateService.go(`modals.${modalName}`, data, {
+    location: false,   // Don't update URL
+    inherit: true
+  });
+}
+
+function closeModal() {
+  return stateService.go('^', {}, {
+    location: false
+  });
+}
+```
+
+### Example 4: Conditional Navigation
+
+```typescript
+async function navigateWithAuth(targetState: string) {
+  const isAuthenticated = await checkAuth();
+  
+  if (!isAuthenticated) {
+    return stateService.go('login', {}, {
+      location: 'replace'
+    });
+  }
+  
+  return stateService.go(targetState);
+}
+```
+
+### Example 5: Breadcrumb Navigation
+
+```typescript
+function navigateToBreadcrumb(stateIndex: number) {
+  const currentState = stateService.$current;
+  const path = currentState.path;
+  const targetState = path[stateIndex];
+  
+  return stateService.go(targetState.name, {}, {
+    reload: false,
+    inherit: true
+  });
+}
+```
+
+## Best Practices
+
+<Steps>
+
+### Prefer go() over transitionTo()
+
+Use `go()` for standard navigation:
+```typescript
+// Good
+stateService.go('user', { userId: 123 });
+
+// Avoid unless you need low-level control
+stateService.transitionTo('user', { userId: 123 }, {...});
+```
+
+### Handle navigation promises
+
+```typescript
+stateService.go('dashboard')
+  .then(() => console.log('Navigation complete'))
+  .catch((error) => console.error('Navigation failed', error));
+```
+
+### Use relative navigation for modularity
+
+```typescript
+// More maintainable
+stateService.go('^.sibling');
+
+// Less maintainable - hardcoded parent name
+stateService.go('parent.sibling');
+```
+
+### Set reload: true when data needs refreshing
+
+```typescript
+function refreshDashboard() {
+  return stateService.reload();
+}
+```
+
+### Use location: 'replace' for redirects
+
+```typescript
+// Don't add redirect to history
+stateService.go('newLocation', {}, { location: 'replace' });
+```
+
+</Steps>
+
+## Related Documentation
+
+- [State Configuration](/guides/state-configuration) - Define states
+- [Parameters](/guides/parameters) - Work with parameters
+- [Transition Hooks](/guides/transition-hooks) - Control navigation
+- [URL Routing](/guides/url-routing) - URL-based navigation
+
+## API Reference
+
+- [StateService](/api/state-service) - Navigation methods (`go`, `transitionTo`, `reload`)
+- [TransitionOptions](/api/transition) - Navigation options
+- [UrlService](/api/url-service) - URL-based navigation

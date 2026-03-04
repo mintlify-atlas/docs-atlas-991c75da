@@ -1,0 +1,225 @@
+---
+title: UrlMatcher
+description: Matches URLs against patterns and extracts parameters
+---
+
+The `UrlMatcher` class matches URLs against patterns and extracts named parameters from the path or search portions of the URL.
+
+## Overview
+
+```typescript
+class UrlMatcher
+```
+
+A URL pattern consists of a path pattern, optionally followed by `?` and a list of search (query) parameters. Multiple search parameter names are separated by `&`.
+
+## Pattern Syntax
+
+### Path Parameters
+
+Path parameters are defined using:
+- Curly brace placeholders: `/somepath/{param}`
+- Colon placeholders: `/somePath/:param`
+
+### Parameter RegExp
+
+A parameter RegExp may be defined after a colon:
+```
+/somePath/{param:[a-zA-Z0-9]+}
+```
+
+The regexp must match for the URL to be matched. The regexp itself can contain curly braces if they are in matched pairs or escaped with a backslash.
+
+### Custom Parameter Types
+
+Custom parameter types may be specified after a colon:
+```
+/somePath/{param:int}
+```
+
+See [UrlConfig.type()](/api/url-config#type) for more information.
+
+### Catch-All Parameters
+
+Catch-all parameters are defined using an asterisk:
+```
+/somepath/*catchallparam
+```
+
+A catch-all parameter matches the remainder of the URL.
+
+## Examples
+
+```javascript
+// Matches only if the path is exactly '/hello/'
+new UrlMatcher('/hello/');
+
+// Matches '/user/bob' or '/user/1234' but not '/user' or '/user/bob/details'
+// Captures the second path segment as parameter 'id'
+new UrlMatcher('/user/:id');
+
+// Same as previous, using curly brace syntax
+new UrlMatcher('/user/{id}');
+
+// Only matches if id consists of 1 to 8 hex digits
+new UrlMatcher('/user/{id:[0-9a-fA-F]{1,8}}');
+
+// Matches any URL starting with '/files/' and captures the rest as 'path'
+new UrlMatcher('/files/{path:.*}');
+new UrlMatcher('/files/*path');
+
+// Matches "/calendar/2014-11-12" and provides a Date object in params
+new UrlMatcher('/calendar/{start:date}');
+```
+
+## Properties
+
+### pattern
+
+```typescript
+public pattern: string
+```
+
+The pattern string that was passed to the constructor.
+
+## Methods
+
+### exec()
+
+Tests the specified URL against this matcher.
+
+```typescript
+public exec(
+  path: string,
+  search?: any,
+  hash?: string,
+  options?: any
+): RawParams | null
+```
+
+**Parameters:**
+- `path` - The URL path to match (e.g., `$location.path()`)
+- `search` - URL search parameters (e.g., `$location.search()`)
+- `hash` - URL hash (e.g., `$location.hash()`)
+- `options` - Options object
+
+**Returns:** An object containing the captured parameter values, or `null` if the path does not match.
+
+**Example:**
+```javascript
+const matcher = new UrlMatcher('/user/{id}?q&r');
+matcher.exec('/user/bob', { x: '1', q: 'hello' });
+// returns { id: 'bob', q: 'hello', r: null }
+```
+
+### format()
+
+Creates a URL from a set of parameter values.
+
+```typescript
+public format(values?: RawParams): string | null
+```
+
+**Parameters:**
+- `values` - The parameter values to substitute into the pattern
+
+**Returns:** The formatted URL (path and optionally search part), or `null` if validation failed.
+
+**Example:**
+```javascript
+const matcher = new UrlMatcher('/user/{id}?q');
+matcher.format({ id: 'bob', q: 'yes' });
+// returns '/user/bob?q=yes'
+```
+
+### validates()
+
+Validates parameter values against this UrlMatcher.
+
+```typescript
+public validates(params: RawParams): boolean
+```
+
+**Parameters:**
+- `params` - The parameter object to validate
+
+**Returns:** `true` if the params validate correctly.
+
+### append()
+
+Creates a new concatenated UrlMatcher.
+
+```typescript
+public append(url: UrlMatcher): UrlMatcher
+```
+
+**Parameters:**
+- `url` - A `UrlMatcher` instance to append as a child
+
+**Returns:** The appended `UrlMatcher`.
+
+Builds a new UrlMatcher by appending another UrlMatcher to this one.
+
+### parameters()
+
+Returns all path and search parameters.
+
+```typescript
+public parameters(opts?: any): Param[]
+```
+
+**Parameters:**
+- `opts` - Options object (e.g., `{ inherit: false }`)
+
+**Returns:** An array of `Param` objects. Must be treated as read-only.
+
+### parameter()
+
+Returns a single parameter by id.
+
+```typescript
+public parameter(id: string, opts?: any): Param | null
+```
+
+**Parameters:**
+- `id` - The parameter id
+- `opts` - Options object (e.g., `{ inherit: false }`)
+
+**Returns:** The `Param` object or `null`.
+
+### toString()
+
+Returns the input pattern string.
+
+```typescript
+public toString(): string
+```
+
+**Returns:** The pattern string.
+
+## Static Methods
+
+### compare()
+
+Compares two UrlMatchers for specificity.
+
+```typescript
+static compare(a: UrlMatcher, b: UrlMatcher): number
+```
+
+**Parameters:**
+- `a` - First UrlMatcher
+- `b` - Second UrlMatcher
+
+**Returns:** 
+- Negative number if `a` is more specific
+- Positive number if `b` is more specific  
+- `0` if equally specific
+
+This function sorts static segments before dynamic ones.
+
+## Related
+
+- [Param](/api/param)
+- [ParamType](/api/param-types)
+- [UrlConfig](/api/url-config)

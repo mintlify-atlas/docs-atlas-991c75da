@@ -1,0 +1,623 @@
+---
+title: 'StateService'
+description: 'Core state navigation and management service'
+---
+
+## Overview
+
+The `StateService` is the primary API for state navigation and management in UI-Router. It provides methods to transition between states, check the current state, generate URLs, and more.
+
+Access the state service via `router.stateService`.
+
+## Properties
+
+### current
+
+The current StateDeclaration.
+
+```typescript
+current: StateDeclaration
+```
+
+This is a read-only property that returns the currently active state declaration.
+
+**Example**:
+```typescript
+if (stateService.current.name === 'home') {
+  console.log('Currently on home state');
+}
+```
+
+<Note>
+This is a passthrough to `UIRouterGlobals.current`.
+</Note>
+
+### $current
+
+The current StateObject (internal API).
+
+```typescript
+$current: StateObject
+```
+
+Returns the internal StateObject representation of the current state.
+
+<Warning>
+This is an internal API and is subject to change without notice. Use `current` instead when possible.
+</Warning>
+
+### params
+
+The latest successful state parameters.
+
+```typescript
+params: StateParams
+```
+
+Returns the parameter values from the most recent successful transition.
+
+**Example**:
+```typescript
+const userId = stateService.params.userId;
+console.log(`Current user ID: ${userId}`);
+```
+
+<Note>
+This is a passthrough to `UIRouterGlobals.params`.
+</Note>
+
+### transition
+
+The Transition currently in progress (or null).
+
+```typescript
+transition: Transition | null
+```
+
+**Example**:
+```typescript
+if (stateService.transition) {
+  console.log(`Transitioning to ${stateService.transition.to().name}`);
+}
+```
+
+<Note>
+This is a passthrough to `UIRouterGlobals.transition`.
+</Note>
+
+## Navigation Methods
+
+### go
+
+Transition to a different state and/or parameters.
+
+```typescript
+go(
+  to: StateOrName,
+  params?: RawParams,
+  options?: TransitionOptions
+): TransitionPromise
+```
+
+**Parameters**:
+- `to` - Absolute state name, state object, or relative state path
+- `params` - Parameter values for the target state (optional)
+- `options` - Transition options (optional)
+
+**Return value**: A promise that resolves when the transition completes. The promise has a `transition` property containing the Transition object.
+
+**Behavior**: 
+- Automatically sets `location: true`, `inherit: true`, `relative: $current`, and `notify: true`
+- Allows relative state names (e.g., `^`, `.child`)
+- Unspecified parameters inherit from current values
+
+**Example - Absolute state**:
+```typescript
+stateService.go('contact.detail');
+```
+
+**Example - With parameters**:
+```typescript
+stateService.go('users.detail', { userId: 123 });
+```
+
+**Example - Relative navigation**:
+```typescript
+// From 'home.dashboard', go to 'home.settings'
+stateService.go('^.settings');
+
+// Go to parent state
+stateService.go('^');
+
+// Go to child state
+stateService.go('.child.grandchild');
+```
+
+**Example - With options**:
+```typescript
+stateService.go('home', {}, { reload: true });
+```
+
+### transitionTo
+
+Low-level method for transitioning to a new state.
+
+```typescript
+transitionTo(
+  to: StateOrName,
+  toParams?: RawParams,
+  options?: TransitionOptions
+): TransitionPromise
+```
+
+**Parameters**:
+- `to` - State name or state object
+- `toParams` - Parameter values (optional, defaults to `{}`)
+- `options` - Transition options (optional, defaults to `{}`)
+
+**Return value**: A promise representing the state of the new transition.
+
+<Note>
+The `go` method (which uses `transitionTo` internally) is recommended in most situations. Use `transitionTo` when you need more control over default options.
+</Note>
+
+**Example**:
+```typescript
+stateService.transitionTo('contact.detail', { id: 1 }, {
+  location: 'replace',
+  inherit: false
+});
+```
+
+### reload
+
+Reloads the current state.
+
+```typescript
+reload(reloadState?: StateOrName): Promise<StateObject>
+```
+
+**Parameters**:
+- `reloadState` - Optional. If provided, this state and all its children will be reloaded, but ancestors will not
+
+**Return value**: A promise representing the state of the new transition.
+
+**Behavior**:
+- Forces re-resolution of all resolves
+- Reinstantiates all components
+- Equivalent to: `transitionTo($current, $params, { reload: true, inherit: false })`
+
+**Example - Reload current state**:
+```typescript
+stateService.reload();
+```
+
+**Example - Reload from specific state**:
+```typescript
+// Current state: 'contacts.detail.item'
+// Reloads 'contacts.detail' and 'contacts.detail.item'
+stateService.reload('contacts.detail');
+```
+
+### target
+
+Creates a TargetState object.
+
+```typescript
+target(
+  identifier: StateOrName,
+  params?: RawParams,
+  options?: TransitionOptions
+): TargetState
+```
+
+**Parameters**:
+- `identifier` - State name or state object
+- `params` - Parameter values (optional)
+- `options` - Transition options (optional)
+
+**Return value**: A TargetState object encapsulating the state, parameters, and options.
+
+**Use case**: Primarily used in transition hooks to redirect transitions.
+
+**Example - Redirect in hook**:
+```typescript
+transitionService.onBefore({ to: 'admin.**' }, (trans) => {
+  const authService = trans.injector().get('AuthService');
+  if (!authService.isAdmin()) {
+    return trans.router.stateService.target('home');
+  }
+});
+```
+
+## State Checking Methods
+
+### is
+
+Checks if the current state *is* the provided state.
+
+```typescript
+is(
+  stateOrName: StateOrName,
+  params?: RawParams,
+  options?: { relative?: StateOrName }
+): boolean
+```
+
+**Parameters**:
+- `stateOrName` - State name (absolute or relative) or state object
+- `params` - Optional. Parameter values to test against current params
+- `options` - Optional. Relative state for resolving relative names
+
+**Return value**: `true` if the current state matches exactly, `false` otherwise.
+
+**Behavior**:
+- Only checks for full state name match (not partial like `includes`)
+- If `params` provided, tests for strict equality (all params must match)
+- Supports relative state names when `options.relative` is set
+
+**Example - Absolute name**:
+```typescript
+// Current state: 'contacts.details.item'
+stateService.is('contacts.details.item'); // true
+stateService.is('contacts'); // false
+```
+
+**Example - With params**:
+```typescript
+// Current: 'users.detail' with { userId: 123 }
+stateService.is('users.detail', { userId: 123 }); // true
+stateService.is('users.detail', { userId: 456 }); // false
+stateService.is('users.detail'); // true (params not checked)
+```
+
+**Example - Relative name**:
+```typescript
+// From within 'contacts.details' template
+stateService.is('.item'); // checks 'contacts.details.item'
+```
+
+### includes
+
+Checks if the current state *includes* the provided state.
+
+```typescript
+includes(
+  stateOrName: StateOrName,
+  params?: RawParams,
+  options?: TransitionOptions
+): boolean
+```
+
+**Parameters**:
+- `stateOrName` - Partial name, relative name, glob pattern, or state object
+- `params` - Optional. Parameter values to test (partial matching)
+- `options` - Optional. Options including `relative` state
+
+**Return value**: `true` if the current state is equal to or is a child of the specified state.
+
+**Behavior**:
+- Checks if current state is or is a child of the specified state
+- Supports glob patterns (`*`, `**`)
+- Not all parameters need to match (partial matching)
+
+**Example - Partial names**:
+```typescript
+// Current state: 'contacts.details.item'
+stateService.includes('contacts'); // true
+stateService.includes('contacts.details'); // true
+stateService.includes('contacts.details.item'); // true
+stateService.includes('contacts.list'); // false
+stateService.includes('about'); // false
+```
+
+**Example - Glob patterns**:
+```typescript
+// Current state: 'contacts.details.item.url'
+stateService.includes('*.details.*.*'); // true
+stateService.includes('*.details.**'); // true
+stateService.includes('**.item.**'); // true
+stateService.includes('*.details.item.url'); // true
+stateService.includes('*.details.*'); // false
+stateService.includes('item.**'); // false
+```
+
+**Example - With params**:
+```typescript
+// Current: 'users.detail' with { userId: 123, tab: 'profile' }
+stateService.includes('users', { userId: 123 }); // true
+stateService.includes('users'); // true (params not checked)
+```
+
+## URL Methods
+
+### href
+
+Generates a URL for a state and parameters.
+
+```typescript
+href(
+  stateOrName: StateOrName,
+  params?: RawParams,
+  options?: HrefOptions
+): string
+```
+
+**Parameters**:
+- `stateOrName` - State name or state object
+- `params` - Parameter values to populate the URL (optional)
+- `options` - Options controlling URL generation (optional)
+
+**HrefOptions**:
+- `lossy` - If `true`, use nearest ancestor with URL (default: `true`)
+- `inherit` - If `true`, inherit params from current state (default: `true`)
+- `absolute` - If `true`, generate absolute URL (default: `false`)
+- `relative` - State to resolve relative names from (default: `$current`)
+
+**Return value**: The compiled state URL, or `null` if the state has no URL.
+
+**Example - Basic usage**:
+```typescript
+const url = stateService.href('about.person', { person: 'bob' });
+// Returns: '/about/bob'
+```
+
+**Example - Absolute URL**:
+```typescript
+const url = stateService.href('home', {}, { absolute: true });
+// Returns: 'http://www.example.com/home'
+```
+
+**Example - No parameter inheritance**:
+```typescript
+const url = stateService.href('users.list', {}, { inherit: false });
+```
+
+## State Registry Methods
+
+### get
+
+Gets a registered StateDeclaration object.
+
+```typescript
+get(): StateDeclaration[]
+get(stateOrName: StateOrName): StateDeclaration
+get(stateOrName: StateOrName, base: StateOrName): StateDeclaration
+```
+
+**Parameters**:
+- `stateOrName` - Optional. State name (absolute or relative) or state object
+- `base` - Optional. Base state for resolving relative references
+
+**Return value**: 
+- If no arguments: array of all registered StateDeclaration objects
+- If state specified: the matching StateDeclaration, or `null` if not found
+
+<Warning>
+Deprecated. Use `StateRegistry.get()` instead via `router.stateRegistry.get()`.
+</Warning>
+
+**Example - Get all states**:
+```typescript
+const allStates = stateService.get();
+console.log(`${allStates.length} states registered`);
+```
+
+**Example - Get specific state**:
+```typescript
+const homeState = stateService.get('home');
+if (homeState) {
+  console.log(`Home state URL: ${homeState.url}`);
+}
+```
+
+**Example - Relative reference**:
+```typescript
+const childState = stateService.get('.child', 'parent');
+// Resolves to 'parent.child'
+```
+
+### lazyLoad
+
+Lazy loads a state.
+
+```typescript
+lazyLoad(
+  stateOrName: StateOrName,
+  transition?: Transition
+): Promise<LazyLoadResult>
+```
+
+**Parameters**:
+- `stateOrName` - The state that should be lazy loaded
+- `transition` - Optional. The transition context to use
+
+**Return value**: A promise that resolves when lazy loading completes.
+
+**Behavior**:
+- Explicitly runs a state's `lazyLoad` function
+- If no transition provided, creates a noop transition (not actually run)
+- Promise resolves with LazyLoadResult containing loaded states
+
+**Example**:
+```typescript
+stateService.lazyLoad('admin.**')
+  .then(() => {
+    console.log('Admin module loaded');
+    return stateService.go('admin.dashboard');
+  });
+```
+
+## Hook Registration
+
+### onInvalid
+
+Registers an invalid state handler.
+
+```typescript
+onInvalid(callback: OnInvalidCallback): Function
+```
+
+**Parameters**:
+- `callback` - Function invoked when transitioning to an invalid state
+
+**Callback signature**:
+```typescript
+type OnInvalidCallback = (
+  toState?: TargetState,
+  fromState?: TargetState,
+  injector?: UIInjector
+) => HookResult
+```
+
+**Return value**: A deregistration function.
+
+**Behavior**:
+- Called when `transitionTo` is invoked with an invalid state reference
+- Can return a TargetState to redirect
+- Can return a Promise for async handling
+
+**Example - Lazy load on invalid**:
+```typescript
+stateService.onInvalid((to, from, injector) => {
+  if (to.name() === 'foo') {
+    const lazyLoader = injector.get('LazyLoadService');
+    return lazyLoader.load('foo')
+      .then(() => stateService.target('foo'));
+  }
+});
+```
+
+### defaultErrorHandler
+
+Sets or gets the default transitionTo error handler.
+
+```typescript
+defaultErrorHandler(handler?: (error: any) => void): (error: any) => void
+```
+
+**Parameters**:
+- `handler` - Optional. A global error handler function
+
+**Return value**: The current global error handler.
+
+**Behavior**:
+- Called when a Transition is rejected or errors occur
+- Does not receive Redirected and Ignored transition rejections
+- Default handler logs to console
+
+**Example - Custom error handler**:
+```typescript
+stateService.defaultErrorHandler((error) => {
+  if (error.type === RejectType.ERROR) {
+    errorTracker.log(error);
+  }
+});
+```
+
+**Example - Disable logging**:
+```typescript
+stateService.defaultErrorHandler(() => {
+  // Do not log transitionTo errors
+});
+```
+
+## TypeScript Types
+
+### StateOrName
+
+```typescript
+type StateOrName = string | StateDeclaration | StateObject
+```
+
+Accepts a state name string, StateDeclaration object, or StateObject instance.
+
+### TransitionPromise
+
+```typescript
+interface TransitionPromise extends Promise<StateObject> {
+  transition: Transition;
+}
+```
+
+A promise that resolves to a StateObject and includes the Transition instance.
+
+### TransitionOptions
+
+```typescript
+interface TransitionOptions {
+  location?: boolean | 'replace';  // Update browser URL
+  relative?: StateOrName;           // Relative state reference
+  inherit?: boolean;                // Inherit parameter values
+  reload?: boolean | StateOrName;   // Force state reload
+  custom?: any;                     // Custom options
+  supercede?: boolean;              // Cancel active transition
+}
+```
+
+### HrefOptions
+
+```typescript
+interface HrefOptions {
+  relative?: StateOrName;  // Relative state reference
+  lossy?: boolean;         // Use ancestor with URL
+  inherit?: boolean;       // Inherit parameter values
+  absolute?: boolean;      // Generate absolute URL
+}
+```
+
+## Common Patterns
+
+### Navigation with reload
+
+```typescript
+// Reload entire state tree
+stateService.go('home', {}, { reload: true });
+
+// Reload from specific state down
+stateService.go('home.dashboard', {}, { reload: 'home' });
+```
+
+### Replace history entry
+
+```typescript
+stateService.go('newState', {}, { location: 'replace' });
+```
+
+### Silent navigation (no URL update)
+
+```typescript
+stateService.go('newState', {}, { location: false });
+```
+
+### Check state and params
+
+```typescript
+if (stateService.is('users.detail', { userId: 123 })) {
+  console.log('Viewing user 123');
+}
+
+if (stateService.includes('admin.**')) {
+  console.log('In admin section');
+}
+```
+
+### Handle navigation errors
+
+```typescript
+stateService.go('newState')
+  .transition.promise
+  .then((state) => {
+    console.log(`Successfully transitioned to ${state.name}`);
+  })
+  .catch((error) => {
+    console.error('Transition failed:', error);
+  });
+```
+
+## See Also
+
+- [StateRegistry](/api/state-registry) - State registration and management
+- [StateDeclaration](/api/state-declaration) - State configuration interface
+- [TargetState](/api/target-state) - Transition target encapsulation
+- [Transition](/api/transition) - Transition instance API

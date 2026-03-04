@@ -1,0 +1,382 @@
+---
+title: "States"
+description: "State declarations, configuration, and the state registry"
+---
+
+# States
+
+In UI-Router, a **state** is a named, self-contained application location. States define the structure of your application and can include URLs, views, data resolves, and more.
+
+## State Declaration
+
+A state is defined using a [`StateDeclaration`](/api/state-declaration) object:
+
+```typescript
+export interface StateDeclaration {
+  /** The state name (required) */
+  name?: string;
+  
+  /** Abstract state indicator */
+  abstract?: boolean;
+  
+  /** The parent state */
+  parent?: string | StateDeclaration;
+  
+  /** The url fragment for the state */
+  url?: string;
+  
+  /** Params configuration */
+  params?: { [key: string]: ParamDeclaration | any };
+  
+  /** Named views */
+  views?: { [key: string]: _ViewDeclaration };
+  
+  /** Resolve - asynchronously fetch data */
+  resolve?: ResolveTypes[] | { [key: string]: IInjectable };
+  
+  /** An inherited property to store state data */
+  data?: any;
+  
+  /** Redirect to different state/params */
+  redirectTo?: RedirectToResult | ((transition: Transition) => RedirectToResult);
+  
+  /** Transition hooks */
+  onEnter?: TransitionStateHookFn;
+  onRetain?: TransitionStateHookFn;
+  onExit?: TransitionStateHookFn;
+  
+  /** Lazy load code */
+  lazyLoad?: (transition: Transition, state: StateDeclaration) => Promise<LazyLoadResult>;
+}
+```
+
+## Basic State Example
+
+```typescript
+const homeState = {
+  name: 'home',
+  url: '/home',
+  component: HomeComponent,
+  data: {
+    title: 'Home Page'
+  }
+};
+
+router.stateRegistry.register(homeState);
+```
+
+## State Name
+
+The state `name` is a unique identifier:
+
+```typescript
+// Top-level state
+{ name: 'contacts' }
+
+// Nested state (child of 'contacts')
+{ name: 'contacts.detail' }
+
+// Deeply nested
+{ name: 'contacts.detail.edit' }
+```
+
+### Naming Rules
+
+- Names must be unique across the entire state tree
+- Use dots (`.`) to denote parent-child relationships
+- The root state has an empty name (`''`)
+
+## Abstract States
+
+Abstract states cannot be directly navigated to. They serve as templates for child states:
+
+```typescript
+const abstractState = {
+  name: 'admin',
+  abstract: true,
+  url: '/admin',
+  component: AdminLayoutComponent,
+  data: {
+    requiresAuth: true
+  }
+};
+
+const childState = {
+  name: 'admin.users',
+  url: '/users',
+  component: UsersComponent
+  // Inherits requiresAuth: true from parent
+};
+```
+
+<Note>
+Abstract states are useful for:
+- Providing layout components
+- Sharing resolve data
+- Defining common URL prefixes
+- Setting inherited data properties
+</Note>
+
+## Parent States
+
+### Implicit Parent (from name)
+
+The parent is automatically inferred from the state name:
+
+```typescript
+{ name: 'users' }           // No parent (top-level)
+{ name: 'users.list' }      // Parent: 'users'
+{ name: 'users.list.item' } // Parent: 'users.list'
+```
+
+### Explicit Parent
+
+You can explicitly set the parent:
+
+```typescript
+const parentState = {
+  name: 'parent',
+  url: '/parent'
+};
+
+const childState = {
+  name: 'child',
+  parent: 'parent', // or parent: parentState
+  url: '/child'
+};
+```
+
+<Warning>
+When using explicit `parent`, avoid dots in the state name to prevent confusion.
+</Warning>
+
+## State Registration
+
+States are registered with the [`StateRegistry`](/api/state-registry):
+
+```typescript
+export class StateRegistry {
+  /**
+   * Adds a state to the registry
+   * @returns the internal StateObject object
+   */
+  register(stateDefinition: _StateDeclaration): StateObject;
+  
+  /**
+   * Removes a state from the registry
+   */
+  deregister(stateOrName: StateOrName): StateObject[];
+  
+  /**
+   * Gets a registered state
+   */
+  get(stateOrName?: StateOrName, base?: StateOrName): StateDeclaration | StateDeclaration[];
+}
+```
+
+### Example: Register Multiple States
+
+```typescript
+const states = [
+  {
+    name: 'home',
+    url: '/home',
+    component: HomeComponent
+  },
+  {
+    name: 'about',
+    url: '/about',
+    component: AboutComponent
+  },
+  {
+    name: 'contacts',
+    url: '/contacts',
+    component: ContactsComponent,
+    resolve: {
+      contacts: (ContactService) => ContactService.list()
+    }
+  }
+];
+
+states.forEach(state => router.stateRegistry.register(state));
+```
+
+## State Data
+
+The `data` property stores arbitrary metadata that is inherited by child states:
+
+```typescript
+const states = [
+  {
+    name: 'admin',
+    abstract: true,
+    data: {
+      requiresAuth: true,
+      roles: ['admin']
+    }
+  },
+  {
+    name: 'admin.users',
+    // Inherits data: { requiresAuth: true, roles: ['admin'] }
+    data: {
+      pageTitle: 'User Management'
+      // Still has requiresAuth and roles from parent
+    }
+  }
+];
+```
+
+### Accessing State Data
+
+```typescript
+// In a transition hook
+transitionService.onEnter({ entering: '**' }, (trans) => {
+  const state = trans.to();
+  if (state.data && state.data.requiresAuth) {
+    // Check authentication
+  }
+});
+```
+
+## Redirect States
+
+The `redirectTo` property redirects transitions:
+
+```typescript
+// Simple string redirect
+{
+  name: 'home',
+  redirectTo: 'home.dashboard'
+}
+
+// Object with state and params
+{
+  name: 'users',
+  redirectTo: { state: 'users.list', params: { page: 1 } }
+}
+
+// Function (can be async)
+{
+  name: 'profile',
+  redirectTo: (transition) => {
+    const userService = transition.injector().get('UserService');
+    return userService.getCurrentUser().then(user => {
+      return user.isAdmin ? 'admin.dashboard' : 'user.dashboard';
+    });
+  }
+}
+```
+
+## State Lifecycle Hooks
+
+States can define lifecycle hooks:
+
+```typescript
+const state = {
+  name: 'mystate',
+  
+  onEnter: (transition, state) => {
+    console.log('Entering', state.name);
+    // Can return a promise to delay entry
+  },
+  
+  onRetain: (transition, state) => {
+    console.log('Retaining', state.name);
+    // Called when state is retained during transition
+  },
+  
+  onExit: (transition, state) => {
+    console.log('Exiting', state.name);
+    // Can return false to cancel transition
+  }
+};
+```
+
+See [Transition Hooks](/concepts/hooks) for more details.
+
+## StateObject Internal Representation
+
+When registered, states are converted to [`StateObject`](/api/state-object) instances:
+
+```typescript
+export class StateObject {
+  /** The parent StateObject */
+  public parent: StateObject;
+  
+  /** The name used to register the state */
+  public name: string;
+  
+  /** Prototypally inherits from StateDeclaration.abstract */
+  public abstract: boolean;
+  
+  /** A compiled URLMatcher which detects when the state's URL is matched */
+  public url: UrlMatcher;
+  
+  /** The parameters for the state */
+  public params: { [key: string]: Param };
+  
+  /** The views for the state */
+  public views: { [key: string]: _ViewDeclaration };
+  
+  /** A list of Resolvable objects */
+  public resolvables: Resolvable[];
+  
+  /** The original StateDeclaration */
+  public self: StateDeclaration;
+  
+  /** The parent StateObject objects from this state up to the root */
+  public path: StateObject[];
+  
+  /** An object containing the parent States' names as keys */
+  public includes: { [name: string]: boolean };
+}
+```
+
+### Accessing StateObject
+
+```typescript
+const stateDef = { name: 'mystate', url: '/mystate' };
+router.stateRegistry.register(stateDef);
+
+// Get the StateObject
+const stateObj = stateDef.$$state();
+```
+
+## State Events
+
+Listen for state registration changes:
+
+```typescript
+const deregister = router.stateRegistry.onStatesChanged(
+  (event, states) => {
+    if (event === 'registered') {
+      console.log('States registered:', states.map(s => s.name));
+    } else if (event === 'deregistered') {
+      console.log('States removed:', states.map(s => s.name));
+    }
+  }
+);
+
+// Later: stop listening
+deregister();
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="State Tree" icon="folder-tree" href="/concepts/state-tree">
+    Learn about hierarchical state organization
+  </Card>
+  
+  <Card title="URLs & Parameters" icon="link" href="/concepts/urls-and-parameters">
+    Configure URLs and parameters for states
+  </Card>
+  
+  <Card title="Views" icon="eye" href="/concepts/views">
+    Define view configurations for states
+  </Card>
+  
+  <Card title="Transitions" icon="arrows-turn-right" href="/concepts/transitions">
+    Navigate between states
+  </Card>
+</CardGroup>

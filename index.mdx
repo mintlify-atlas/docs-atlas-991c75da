@@ -1,97 +1,274 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: UI-Router Core Documentation
+description: Framework-agnostic, state-based routing library for JavaScript Single Page Applications
+mode: custom
 ---
 
-## Setting up
+<div className="relative dark:bg-[#0f1117] bg-white overflow-hidden">
+  {/* Hero Section */}
+  <div className="relative py-20 dark:bg-gradient-to-br dark:from-[#0f1117] dark:via-[#1a1d27] dark:to-[#0f1117] bg-gradient-to-br from-white via-gray-50 to-white border-b dark:border-[#27272a] border-gray-200">
+    <div className="max-w-6xl mx-auto px-6 sm:px-8">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+        {/* Left Column - Content */}
+        <div className="lg:col-span-7 text-center lg:text-left">
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold dark:text-gray-100 text-gray-900 leading-tight">
+            State-based routing for JavaScript SPAs
+          </h1>
+          <p className="mt-6 text-lg sm:text-xl dark:text-gray-400 text-gray-600 max-w-2xl mx-auto lg:mx-0">
+            A framework-agnostic routing library with hierarchical states, powerful transitions, and flexible URL management. The foundation for UI-Router implementations across Angular, React, and more.
+          </p>
+          
+          {/* CTA Buttons */}
+          <div className="mt-8 flex flex-wrap gap-4 justify-center lg:justify-start">
+            <a
+              href="/quickstart"
+              className="inline-flex items-center px-6 py-3 rounded-lg bg-[#139ed8] hover:bg-[#0f7fb0] text-white font-semibold transition-colors shadow-lg"
+            >
+              Get Started
+              <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </a>
+            <a
+              href="/api/uirouter"
+              className="inline-flex items-center px-6 py-3 rounded-lg dark:bg-white/10 bg-gray-100 dark:hover:bg-white/20 hover:bg-gray-200 dark:border-white/30 border-gray-300 border dark:text-gray-100 text-gray-900 font-semibold transition-colors"
+            >
+              API Reference
+            </a>
+          </div>
+        </div>
 
-Get your documentation site up and running in minutes.
+        {/* Right Column - Visual Element */}
+        <div className="lg:col-span-5 flex justify-center lg:justify-end">
+          <div className="relative w-full max-w-md">
+            <div className="dark:bg-[#1a1d27] bg-gray-50 dark:border-[#27272a] border-gray-200 border rounded-2xl p-6 shadow-xl">
+              <pre className="text-sm dark:text-gray-300 text-gray-700 overflow-x-auto">
+{`import { UIRouter } from '@uirouter/core';
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+const router = new UIRouter();
 
-## Make it yours
+router.stateRegistry.register({
+  name: 'home',
+  url: '/',
+  component: HomeComponent
+});
 
-Design a docs site that looks great and empowers your users.
+router.urlService.listen();
+router.urlService.sync();`}
+              </pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+  {/* Quick Start Section */}
+  <div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+    <h2 className="text-2xl sm:text-3xl font-semibold dark:text-white text-gray-900 mb-3">
+      Quick start
+    </h2>
+    <p className="text-base dark:text-gray-400 text-gray-600 mb-8">
+      Get UI-Router Core running in your project in minutes
+    </p>
 
-## Create beautiful pages
+    <Steps>
+      <Step title="Install the package">
+        Add UI-Router Core to your project using your preferred package manager:
 
-Everything you need to create world-class documentation.
+        <CodeGroup>
+        ```bash npm
+        npm install @uirouter/core
+        ```
+        ```bash yarn
+        yarn add @uirouter/core
+        ```
+        ```bash pnpm
+        pnpm add @uirouter/core
+        ```
+        </CodeGroup>
+      </Step>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+      <Step title="Create a router instance">
+        Import and instantiate the UIRouter class:
 
-## Need inspiration?
+        ```typescript
+        import { UIRouter } from '@uirouter/core';
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+        const router = new UIRouter();
+        ```
+
+        The router instance provides access to all core services: state management, transitions, URL handling, and more.
+      </Step>
+
+      <Step title="Register your states">
+        Define the states that make up your application:
+
+        ```typescript
+        router.stateRegistry.register({
+          name: 'home',
+          url: '/',
+          component: HomeComponent
+        });
+
+        router.stateRegistry.register({
+          name: 'about',
+          url: '/about',
+          component: AboutComponent
+        });
+        ```
+
+        States can be hierarchical, with parent-child relationships and nested views.
+      </Step>
+
+      <Step title="Start the router">
+        Enable URL monitoring and synchronize with the current location:
+
+        ```typescript
+        router.urlService.listen();
+        router.urlService.sync();
+        ```
+
+        The router is now active and will respond to navigation and URL changes.
+      </Step>
+    </Steps>
+  </div>
+
+  {/* Key Features Grid */}
+  <div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+    <h2 className="text-2xl sm:text-3xl font-semibold dark:text-white text-gray-900 mb-3">
+      Core features
+    </h2>
+    <p className="text-base dark:text-gray-400 text-gray-600 mb-8">
+      Powerful routing capabilities for modern single-page applications
+    </p>
+
+    <CardGroup cols={2}>
+      <Card title="State machine routing" icon="sitemap" href="/concepts/states">
+        Organize your app as a hierarchical tree of states with enter/exit hooks and transaction-like transitions
+      </Card>
+      <Card title="Flexible URLs" icon="link" href="/concepts/urls-and-parameters">
+        Support for path, query, and non-URL parameters with built-in and custom types, defaults, and optional values
+      </Card>
+      <Card title="Transition hooks" icon="webhook" href="/concepts/hooks">
+        First-class async support with lifecycle hooks for authentication, authorization, logging, and more
+      </Card>
+      <Card title="Nested views" icon="layer-group" href="/concepts/views">
+        Multiple named views and view nesting for complex UI layouts and component composition
+      </Card>
+      <Card title="Lazy loading" icon="download" href="/advanced/lazy-loading">
+        Load state configurations and dependencies on-demand to reduce initial bundle size
+      </Card>
+      <Card title="Framework agnostic" icon="puzzle-piece" href="/advanced/framework-integration">
+        Core library works with any framework — official integrations for Angular and React available
+      </Card>
+    </CardGroup>
+  </div>
+
+  {/* Explore Documentation */}
+  <div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+    <h2 className="text-2xl sm:text-3xl font-semibold dark:text-white text-gray-900 mb-3">
+      Explore the documentation
+    </h2>
+    <p className="text-base dark:text-gray-400 text-gray-600 mb-8">
+      Deep dive into concepts, guides, and API references
+    </p>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Core Concepts Card */}
+      <a
+        href="/concepts/overview"
+        className="group block rounded-2xl dark:border-[#27272a] border-gray-200 border dark:hover:border-[#139ed8] hover:border-[#139ed8] overflow-hidden transition-colors no-underline dark:bg-[#1a1d27] bg-gray-50"
+      >
+        <div className="h-48 dark:bg-[#242838] bg-gray-100 flex items-center justify-center overflow-hidden">
+          <svg className="w-24 h-24 dark:text-[#139ed8] text-[#139ed8] opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+          </svg>
+        </div>
+        <div className="p-6">
+          <h3 className="text-base font-semibold dark:text-gray-100 text-gray-900 mb-2">
+            Core Concepts
+          </h3>
+          <p className="text-sm dark:text-gray-400 text-gray-600 mb-4">
+            Learn about states, transitions, URLs, parameters, views, and hooks — the building blocks of UI-Router
+          </p>
+          <div className="flex items-center text-sm font-medium dark:text-[#139ed8] text-[#139ed8] dark:group-hover:text-[#63b4c6] group-hover:text-[#0f7fb0]">
+            Explore concepts
+            <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </div>
+      </a>
+
+      {/* Guides Card */}
+      <a
+        href="/guides/state-configuration"
+        className="group block rounded-2xl dark:border-[#27272a] border-gray-200 border dark:hover:border-[#139ed8] hover:border-[#139ed8] overflow-hidden transition-colors no-underline dark:bg-[#1a1d27] bg-gray-50"
+      >
+        <div className="h-48 dark:bg-[#242838] bg-gray-100 flex items-center justify-center overflow-hidden">
+          <svg className="w-24 h-24 dark:text-[#139ed8] text-[#139ed8] opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+        </div>
+        <div className="p-6">
+          <h3 className="text-base font-semibold dark:text-gray-100 text-gray-900 mb-2">
+            Practical Guides
+          </h3>
+          <p className="text-sm dark:text-gray-400 text-gray-600 mb-4">
+            Step-by-step guides for common tasks: configuring states, handling navigation, working with parameters, and more
+          </p>
+          <div className="flex items-center text-sm font-medium dark:text-[#139ed8] text-[#139ed8] dark:group-hover:text-[#63b4c6] group-hover:text-[#0f7fb0]">
+            Browse guides
+            <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  {/* Resources Section */}
+  <div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+    <h2 className="text-2xl sm:text-3xl font-semibold dark:text-white text-gray-900 mb-3">
+      Resources and community
+    </h2>
+    <p className="text-base dark:text-gray-400 text-gray-600 mb-8">
+      Connect with the UI-Router community and explore framework-specific implementations
+    </p>
+
+    <CardGroup cols={3}>
+      <Card title="GitHub Repository" icon="github" href="https://github.com/ui-router/core">
+        View source code, report issues, and contribute to the project
+      </Card>
+      <Card title="UI-Router for Angular" icon="angular" href="https://ui-router.github.io/ng1">
+        Full-featured router for Angular 1.x applications
+      </Card>
+      <Card title="UI-Router for React" icon="react" href="https://ui-router.github.io/react">
+        State-based routing for React applications
+      </Card>
+    </CardGroup>
+  </div>
+
+  {/* Closing CTA */}
+  <div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+    <div className="dark:bg-gradient-to-br dark:from-[#1a1d27] dark:to-[#242838] bg-gradient-to-br from-gray-50 to-gray-100 dark:border-[#27272a] border-gray-200 border rounded-2xl p-8 sm:p-12 text-center">
+      <h2 className="text-2xl sm:text-3xl font-bold dark:text-white text-gray-900 mb-4">
+        Ready to get started?
+      </h2>
+      <p className="text-base sm:text-lg dark:text-gray-400 text-gray-600 mb-6 max-w-2xl mx-auto">
+        Build powerful, state-driven single-page applications with UI-Router Core
+      </p>
+      <a
+        href="/quickstart"
+        className="inline-flex items-center px-8 py-4 rounded-lg bg-[#139ed8] hover:bg-[#0f7fb0] text-white font-semibold transition-colors shadow-lg"
+      >
+        Start Building
+        <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+      </a>
+    </div>
+  </div>
+</div>

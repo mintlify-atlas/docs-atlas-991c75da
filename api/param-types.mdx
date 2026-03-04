@@ -1,0 +1,343 @@
+---
+title: ParamType & Built-in Types
+description: Parameter type system and built-in parameter types
+---
+
+UI-Router provides a parameter type system for encoding/decoding parameter values. The `ParamType` class implements custom parameter types, and `ParamTypes` manages the registry of built-in and custom types.
+
+## ParamType Class
+
+```typescript
+class ParamType implements ParamTypeDefinition
+```
+
+An internal class that implements the `ParamTypeDefinition` interface. Created when a parameter type is registered.
+
+### Properties
+
+#### name
+
+```typescript
+name: string
+```
+
+The name/id of the parameter type.
+
+#### pattern
+
+```typescript
+pattern: RegExp
+```
+
+A regular expression that matches the encoded parameter type in the URL.
+
+**Default:** `/.*/`
+
+#### raw
+
+```typescript
+raw: boolean
+```
+
+If `true`, the parameter value will not be URL-encoded.
+
+#### dynamic
+
+```typescript
+dynamic: boolean
+```
+
+If `true`, changes to this parameter type's values will not cause state reload.
+
+#### inherit
+
+```typescript
+inherit: boolean
+```
+
+If `true`, parameter values of this type are inherited during transitions.
+
+**Default:** `true`
+
+### Methods
+
+#### is()
+
+Tests if a value is compatible with this parameter type.
+
+```typescript
+is(val: any, key?: string): boolean
+```
+
+**Parameters:**
+- `val` - The value to check
+- `key` - The parameter name (optional)
+
+**Returns:** `true` if the value matches the type.
+
+#### encode()
+
+Encodes a value to a string for the URL.
+
+```typescript
+encode(val: any, key?: string): string | string[]
+```
+
+**Parameters:**
+- `val` - The value to encode
+- `key` - The parameter name (optional)
+
+**Returns:** A string representation of the value.
+
+#### decode()
+
+Decodes a string from the URL to a typed value.
+
+```typescript
+decode(val: string, key?: string): any
+```
+
+**Parameters:**
+- `val` - The string to decode
+- `key` - The parameter name (optional)
+
+**Returns:** The decoded value.
+
+#### equals()
+
+Determines if two decoded values are equivalent.
+
+```typescript
+equals(a: any, b: any): boolean
+```
+
+**Parameters:**
+- `a` - First value
+- `b` - Second value
+
+**Returns:** `true` if the values are equal.
+
+## ParamTypes Registry
+
+```typescript
+class ParamTypes
+```
+
+The registry manages built-in and custom parameter types.
+
+### Methods
+
+#### type()
+
+Registers or retrieves a parameter type.
+
+```typescript
+type(
+  name: string,
+  definition?: ParamTypeDefinition,
+  definitionFn?: () => ParamTypeDefinition
+): ParamType | this
+```
+
+**Parameters:**
+- `name` - The type name
+- `definition` - The type definition (optional)
+- `definitionFn` - Injectable function returning a definition (optional)
+
+**Returns:** 
+- If only `name` is specified: the registered `ParamType` or `undefined`
+- If `definition` is specified: `this` (for chaining)
+
+## Built-in Types
+
+### string
+
+```typescript
+static string: ParamTypeDefinition
+```
+
+Coerces values to strings. Matches anything (`/.*/) in the URL.
+
+**Example:**
+```javascript
+// State definition
+{
+  url: '/user/:name',
+  // name parameter uses 'string' type by default
+}
+```
+
+### path
+
+```typescript
+static path: ParamTypeDefinition
+```
+
+The default type for path parameters. Behaves like `string` but doesn't match forward slashes `/`.
+
+**Pattern:** `/[^/]*/`
+
+**Example:**
+```javascript
+// Matches /user/bob but not /user/bob/smith
+{
+  url: '/user/:name'
+}
+```
+
+### query
+
+```typescript
+static query: ParamTypeDefinition
+```
+
+The default type for query/search parameters. Behaves the same as `string`.
+
+**Example:**
+```javascript
+{
+  url: '/search?term'
+  // term uses 'query' type by default
+}
+```
+
+### hash
+
+```typescript
+static hash: ParamTypeDefinition
+```
+
+Used for the `#` parameter (the URL hash). Behaves like `string` but with `inherit: false`.
+
+### int
+
+```typescript
+static int: ParamTypeDefinition
+```
+
+Serializes JavaScript integers to/from the URL.
+
+**Pattern:** `/-?\d+/`
+
+**Example:**
+```javascript
+{
+  url: '/user/{id:int}'
+}
+
+$state.go('user', { id: 1298547 });
+// URL: /user/1298547
+// Param value is number 1298547, not string "1298547"
+```
+
+### bool
+
+```typescript
+static bool: ParamTypeDefinition
+```
+
+Serializes `true`/`false` as `1`/`0`.
+
+**Pattern:** `/0|1/`
+
+**Example:**
+```javascript
+{
+  url: '/inbox?{unread:bool}'
+}
+
+$state.go('inbox', { unread: true });
+// URL: /inbox?unread=1
+```
+
+### date
+
+```typescript
+static date: ParamTypeDefinition
+```
+
+Serializes JavaScript Date objects as parameter values.
+
+**Format:** `YYYY-MM-DD`
+
+**Pattern:** `/[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[1-2][0-9]|3[0-1])/`
+
+**Example:**
+```javascript
+{
+  url: '/search?{start:date}'
+}
+
+$state.go('search', { start: new Date(2000, 0, 1) });
+// URL: /search?start=2000-01-01
+```
+
+### json
+
+```typescript
+static json: ParamTypeDefinition
+```
+
+Serializes JavaScript objects using JSON.
+
+**Example:**
+```javascript
+{
+  url: '/map/{coords:json}'
+}
+
+$state.go('map', { coords: { x: 10399.2, y: 49071 } });
+// URL: /map/%7B%22x%22%3A10399.2%2C%22y%22%3A49071%7D
+```
+
+### any
+
+```typescript
+static any: ParamTypeDefinition
+```
+
+The default type for non-URL parameters. Does not encode/decode. Uses deep equality comparison.
+
+**Example:**
+```javascript
+{
+  url: '/new',
+  params: {
+    inreplyto: null  // Uses 'any' type
+  }
+}
+
+$state.go('new', { inreplyto: currentMessage });
+```
+
+## Creating Custom Types
+
+Register custom types using [UrlConfig.type()](/api/url-config#type).
+
+**Example:**
+```javascript
+// Array of integers encoded as dash-delimited string
+urlService.config.type('intarray', {
+  encode: (array) => array.join("-"),
+  decode: (str) => str.split("-").map(x => parseInt(x, 10)),
+  pattern: /[0-9]+(?:-[0-9]+)*/,
+  is: (obj) => Array.isArray(obj) && 
+    obj.reduce((acc, item) => acc && typeof item === 'number', true),
+  equals: (a, b) => a.length === b.length && 
+    a.reduce((acc, item, idx) => acc && item === b[idx], true)
+});
+
+// Use in state
+{
+  url: "/foo/{fooIds:intarray}",
+  controller: function($transition$) {
+    console.log($transition$.params().fooIds); // [1, 2, 3]
+  }
+}
+```
+
+## Related
+
+- [UrlConfig.type()](/api/url-config#type)
+- [ParamDeclaration](/api/param-declaration)
+- [Param](/api/param)

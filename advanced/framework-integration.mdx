@@ -1,0 +1,412 @@
+---
+title: Framework Integration
+description: Build framework adapters for UI-Router Core
+---
+
+## Overview
+
+UI-Router Core is framework-agnostic. To integrate it with a specific framework (React, Angular, Vue, etc.), you need to implement framework-specific adapters for views, directives/components, and location services.
+
+## Architecture
+
+A framework integration typically requires:
+
+1. **Location Services** - Bridge between framework routing and browser URL
+2. **View Components** - Framework-specific `<ui-view>` implementation
+3. **Link Components** - Framework-specific `<ui-sref>` implementation  
+4. **Dependency Injection** - Framework's DI integration
+5. **View Config Factory** - Creates ViewConfig objects from state declarations
+
+## Implementing UIView
+
+The `<ui-view>` component displays the active state's view content.
+
+### ActiveUIView Interface
+
+Your UIView implementation must register with the ViewService using this interface (from src/view/interface.ts:10-25):
+
+```typescript
+export interface ActiveUIView {
+  /** Type of framework, e.g., "ng1" or "ng2" */
+  $type: string;
+  
+  /** An auto-incremented id */
+  id: number;
+  
+  /** The ui-view short name */
+  name: string;
+  
+  /** The ui-view's fully qualified name */
+  fqn: string;
+  
+  /** The ViewConfig that is currently loaded into the ui-view */
+  config: ViewConfig;
+  
+  /** The state context in which the ui-view tag was created */
+  creationContext: ViewContext;
+  
+  /** A callback that should apply a ViewConfig (or clear the ui-view, if config is undefined) */
+  configUpdated: (config: ViewConfig) => void;
+}
+```
+
+### ViewContext Interface
+
+```typescript
+export interface ViewContext {
+  name: string;
+  parent: ViewContext;
+}
+```
+
+### React UIView Example
+
+```typescript
+import React, { Component } from 'react';
+import { UIRouter } from '@uirouter/core';
+
+interface UIViewProps {
+  router: UIRouter;
+  name?: string;
+  className?: string;
+}
+
+export class UIView extends Component<UIViewProps> {
+  private uiView: ActiveUIView;
+  private deregister: Function;
+
+  componentDidMount() {
+    const router = this.props.router;
+    const parentContext = this.getParentContext();
+    const name = this.props.name || '$default';
+
+    // Create the ActiveUIView registration
+    this.uiView = {
+      $type: 'react',
+      id: router.viewService['_uiViews'].length,
+      name: name,
+      fqn: parentContext ? `${parentContext.fqn}.${name}` : name,
+      config: undefined,
+      creationContext: parentContext ? parentContext.context : router.stateRegistry.root(),
+      configUpdated: (config) => {
+        this.uiView.config = config;
+        this.forceUpdate(); // Re-render with new config
+      }
+    };
+
+    // Register with ViewService
+    this.deregister = router.viewService.registerUIView(this.uiView);
+  }
+
+  componentWillUnmount() {
+    this.deregister && this.deregister();
+  }
+
+  render() {
+    const { config } = this.uiView;
+    if (!config) return null;
+
+    // Render the component from the ViewConfig
+    const Component = config.viewDecl.component;
+    return (
+      <div className={this.props.className}>
+        <Component {...this.getResolves(config)} />
+      </div>
+    );
+  }
+
+  private getResolves(config: ViewConfig) {
+    // Extract resolved data from the state
+    const context = config.path[config.path.length - 1];
+    return context.resolvables.map(r => r.data).reduce((acc, val) => ({ ...acc, ...val }), {});
+  }
+
+  private getParentContext(): { fqn: string; context: ViewContext } | null {
+    // Walk up React component tree to find parent UIView
+    // Implementation depends on React context or refs
+    return null;
+  }
+}
+```
+
+### Angular UIView Example
+
+```typescript
+import { Component, Input, OnInit, OnDestroy } from '@angular/core';
+import { UIRouter, ViewService, ActiveUIView, ViewConfig } from '@uirouter/core';
+
+@Component({
+  selector: 'ui-view',
+  template: '<ng-container *ngIf="componentRef" [ngComponentOutlet]="componentRef"></ng-container>'
+})
+export class UIViewComponent implements OnInit, OnDestroy {
+  @Input() name: string = '$default';
+  
+  private uiView: ActiveUIView;
+  private deregister: Function;
+  componentRef: any;
+
+  constructor(private router: UIRouter, private parent: UIViewComponent) {}
+
+  ngOnInit() {
+    const parentContext = this.parent ? this.parent.uiView.creationContext : this.router.stateRegistry.root();
+    const parentFqn = this.parent ? this.parent.uiView.fqn : '';
+
+    this.uiView = {
+      $type: 'ng2',
+      id: Date.now(),
+      name: this.name,
+      fqn: parentFqn ? `${parentFqn}.${this.name}` : this.name,
+      config: undefined,
+      creationContext: parentContext,
+      configUpdated: (config: ViewConfig) => {
+        this.uiView.config = config;
+        this.componentRef = config ? config.viewDecl.component : null;
+      }
+    };
+
+    this.deregister = this.router.viewService.registerUIView(this.uiView);
+  }
+
+  ngOnDestroy() {
+    this.deregister && this.deregister();
+  }
+}
+```
+
+## Implementing UISref
+
+The `<ui-sref>` component/directive creates links to states.
+
+### React UISref Example
+
+```typescript
+import React, { Component, MouseEvent } from 'react';
+import { UIRouter, StateOrName, RawParams, TransitionOptions } from '@uirouter/core';
+
+interface UISrefProps {
+  router: UIRouter;
+  to: StateOrName;
+  params?: RawParams;
+  options?: TransitionOptions;
+  className?: string;
+  activeClass?: string;
+  children: React.ReactNode;
+}
+
+export class UISref extends Component<UISrefProps> {
+  private deregister: Function;
+
+  componentDidMount() {
+    // Listen for state changes to update active class
+    this.deregister = this.props.router.transitionService.onSuccess({}, () => {
+      this.forceUpdate();
+    });
+  }
+
+  componentWillUnmount() {
+    this.deregister && this.deregister();
+  }
+
+  handleClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    const { router, to, params, options } = this.props;
+    router.stateService.go(to, params, options);
+  };
+
+  render() {
+    const { router, to, params, className, activeClass, children } = this.props;
+    const href = router.stateService.href(to, params);
+    const isActive = router.stateService.is(to, params);
+    
+    const classes = [className];
+    if (isActive && activeClass) {
+      classes.push(activeClass);
+    }
+
+    return (
+      <a href={href} className={classes.join(' ')} onClick={this.handleClick}>
+        {children}
+      </a>
+    );
+  }
+}
+```
+
+### Vue UISref Example
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+
+export default {
+  name: 'UISref',
+  props: {
+    to: { type: String, required: true },
+    params: { type: Object, default: () => ({}) },
+    options: { type: Object, default: () => ({}) },
+    activeClass: { type: String, default: 'active' }
+  },
+  inject: ['router'],
+  
+  computed: {
+    href() {
+      return this.router.stateService.href(this.to, this.params);
+    },
+    
+    isActive() {
+      return this.router.stateService.is(this.to, this.params);
+    },
+    
+    classes() {
+      return this.isActive ? [this.activeClass] : [];
+    }
+  },
+  
+  methods: {
+    handleClick(e) {
+      e.preventDefault();
+      this.router.stateService.go(this.to, this.params, this.options);
+    }
+  },
+  
+  render(h) {
+    return h('a', {
+      attrs: { href: this.href },
+      class: this.classes,
+      on: { click: this.handleClick }
+    }, this.$slots.default);
+  }
+};
+```
+
+## ViewConfig Factory
+
+Framework integrations must register a ViewConfig factory that creates ViewConfig objects from state view declarations.
+
+```typescript
+import { PathNode, _ViewDeclaration, ViewConfig } from '@uirouter/core';
+
+class ReactViewConfig implements ViewConfig {
+  $id = Date.now();
+  loaded = false;
+  
+  constructor(
+    public path: PathNode[],
+    public viewDecl: _ViewDeclaration
+  ) {}
+  
+  load(): Promise<ViewConfig> {
+    // Load component if needed (e.g., lazy loading)
+    const component = this.viewDecl.component;
+    
+    if (typeof component === 'function' && component.length === 0) {
+      // It's a function that returns a promise (lazy load)
+      return component().then((loadedComponent) => {
+        this.viewDecl.component = loadedComponent.default || loadedComponent;
+        this.loaded = true;
+        return this;
+      });
+    }
+    
+    this.loaded = true;
+    return Promise.resolve(this);
+  }
+}
+
+// Register the factory
+router.viewService._pluginapi._viewConfigFactory('react', 
+  (path: PathNode[], decl: _ViewDeclaration) => {
+    return new ReactViewConfig(path, decl);
+  }
+);
+```
+
+## State Declaration Extensions
+
+Extend the StateDeclaration interface for framework-specific properties:
+
+```typescript
+import { StateDeclaration as CoreStateDeclaration } from '@uirouter/core';
+
+export interface StateDeclaration extends CoreStateDeclaration {
+  // React-specific
+  component?: React.ComponentType<any>;
+  
+  // Angular-specific  
+  // component?: Type<any>;
+  // template?: string;
+  // templateUrl?: string;
+  // controller?: any;
+  
+  // Vue-specific
+  // component?: Component;
+  
+  views?: {
+    [key: string]: {
+      component?: any;
+      // Other framework-specific view properties
+    }
+  };
+}
+```
+
+## Complete Integration Example
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+import { HashLocationService } from '@uirouter/core/lib/vanilla';
+import { ReactViewConfig } from './viewConfig';
+import { pushStateLocationPlugin } from './locationPlugin';
+
+export class ReactUIRouter {
+  router: UIRouter;
+  
+  constructor() {
+    // Create router with location service
+    this.router = new UIRouter();
+    
+    // Install location plugin
+    this.router.plugin(pushStateLocationPlugin);
+    
+    // Register ViewConfig factory
+    this.router.viewService._pluginapi._viewConfigFactory(
+      'react',
+      (path, decl) => new ReactViewConfig(path, decl)
+    );
+    
+    // Set default view type
+    this.router.stateRegistry.decorator('views', (state, parent) => {
+      const views = state.views || { $default: state };
+      Object.keys(views).forEach(key => {
+        views[key].$type = 'react';
+      });
+      return views;
+    });
+  }
+  
+  start() {
+    // Start URL monitoring
+    this.router.urlService.listen();
+    this.router.urlService.sync();
+  }
+}
+```
+
+## Best Practices
+
+1. **Use unique `$type` identifiers** - Prevents view mismatches across frameworks
+2. **Implement proper cleanup** - Deregister views and listeners in component unmount/destroy
+3. **Handle fully qualified names (fqn)** - Properly calculate nested view names
+4. **Support lazy loading** - Implement async component loading in ViewConfig.load()
+5. **Integrate with framework DI** - Map UI-Router resolves to framework dependency injection
+6. **Provide TypeScript definitions** - Export properly typed interfaces for state declarations
+7. **Document framework-specific features** - Clearly explain any framework-specific behavior
+
+## Reference Implementations
+
+- **Angular 1**: `@uirouter/angularjs`
+- **Angular**: `@uirouter/angular`  
+- **React**: `@uirouter/react`
+- **Vue**: `@uirouter/vue`
+
+Study these packages for complete, production-ready examples.

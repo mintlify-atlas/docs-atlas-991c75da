@@ -1,0 +1,619 @@
+---
+title: Resolve
+description: Complete guide to resolve dependencies and async data loading in UI-Router Core
+---
+
+# Resolve
+
+Resolves allow you to fetch data asynchronously before a state is activated. They ensure required data is available before the state's views are rendered.
+
+## Resolve Basics
+
+Define resolves in state declarations:
+
+```typescript
+router.stateRegistry.register({
+  name: 'user',
+  url: '/users/:userId',
+  resolve: {
+    user: (UserService, $transition$) => {
+      const userId = $transition$.params().userId;
+      return UserService.getUser(userId);
+    }
+  }
+});
+```
+
+The `user` resolve:
+- Executes before entering the state
+- Can inject services and dependencies
+- Returns data (or a promise for data)
+- Makes data available to views and child states
+
+## Resolve Syntax
+
+### Object Syntax
+
+Simple key-value object:
+
+```typescript
+resolve: {
+  // Simple value
+  appName: () => 'My Application',
+  
+  // Inject dependencies
+  user: (UserService, $transition$) => {
+    return UserService.getUser($transition$.params().userId);
+  },
+  
+  // Depend on other resolves
+  permissions: (user, PermissionService) => {
+    return PermissionService.getForUser(user.id);
+  },
+  
+  // Async with promises
+  posts: async (user, PostService) => {
+    return await PostService.getForUser(user.id);
+  }
+}
+```
+
+### Array Syntax (Advanced)
+
+Explicit dependency declaration:
+
+```typescript
+resolve: [
+  {
+    token: 'user',
+    deps: ['UserService', 'Transition'],
+    resolveFn: (userService, transition) => {
+      const userId = transition.params().userId;
+      return userService.getUser(userId);
+    },
+    policy: {
+      when: 'EAGER',
+      async: 'WAIT'
+    }
+  },
+  {
+    token: 'posts',
+    deps: ['user', 'PostService'],
+    resolveFn: (user, postService) => {
+      return postService.getForUser(user.id);
+    }
+  }
+]
+```
+
+## Injectable Dependencies
+
+### Available Tokens
+
+Special injectable tokens:
+
+```typescript
+resolve: {
+  data: (
+    $transition$,    // Current Transition object
+    $state$,         // Current StateObject (for onEnter/onExit hooks)
+    UIRouter,        // Router instance
+    UserService      // Custom services
+  ) => {
+    // Use injected dependencies
+  }
+}
+```
+
+### Transition Object
+
+Access transition details:
+
+```typescript
+resolve: {
+  user: ($transition$) => {
+    // Get parameters
+    const userId = $transition$.params().userId;
+    
+    // Get states
+    const fromState = $transition$.from();
+    const toState = $transition$.to();
+    
+    // Get options
+    const custom = $transition$.options().custom;
+    
+    return UserService.get(userId);
+  }
+}
+```
+
+### Injecting Services
+
+```typescript
+resolve: {
+  // Service injection
+  data: (HttpService, AuthService) => {
+    const token = AuthService.getToken();
+    return HttpService.get('/api/data', { token });
+  }
+}
+```
+
+### Injecting Other Resolves
+
+```typescript
+resolve: {
+  // First resolve
+  user: (UserService, $transition$) => {
+    return UserService.get($transition$.params().userId);
+  },
+  
+  // Second resolve depends on first
+  profile: (user, ProfileService) => {
+    return ProfileService.getForUser(user.id);
+  },
+  
+  // Third depends on first and second
+  settings: (user, profile, SettingsService) => {
+    return SettingsService.get(user.id, profile.type);
+  }
+}
+```
+
+## Resolve Lifecycle
+
+### When Resolves Execute
+
+<Steps>
+
+### Transition starts
+Transition object is created
+
+### EAGER resolves fetch
+Resolves with `when: 'EAGER'` policy start fetching
+
+### State is about to be entered
+Resolves with `when: 'LAZY'` policy (default) start fetching
+
+### All resolves complete
+Wait for all resolves to finish (if `async: 'WAIT'`)
+
+### State activates
+Views render with resolved data available
+
+</Steps>
+
+### Resolve Inheritance
+
+Child states inherit parent resolves:
+
+```typescript
+// Parent state
+router.stateRegistry.register({
+  name: 'app',
+  resolve: {
+    config: () => loadConfig(),
+    user: (AuthService) => AuthService.getCurrentUser()
+  }
+});
+
+// Child state
+router.stateRegistry.register({
+  name: 'app.dashboard',
+  resolve: {
+    // Can inject parent resolves
+    stats: (user, StatsService) => {
+      return StatsService.getForUser(user.id);
+    }
+  }
+});
+
+// Grandchild state
+router.stateRegistry.register({
+  name: 'app.dashboard.analytics',
+  resolve: {
+    // Can inject config, user, and stats
+    report: (user, stats, ReportService) => {
+      return ReportService.generate(user.id, stats);
+    }
+  }
+});
+```
+
+## Resolve Policies
+
+Control when and how resolves are fetched:
+
+### When Policy
+
+Controls when the resolve is fetched:
+
+```typescript
+resolvePolicy: {
+  when: 'LAZY'   // Fetch just before entering (default)
+               // or 'EAGER' to fetch earlier in transition
+}
+```
+
+**LAZY (default):**
+- Fetched just before entering the state
+- Only fetched if state will be entered
+- Good for most use cases
+
+**EAGER:**
+- Fetched early in the transition
+- Fetched even if state might be redirected
+- Use for critical data needed for redirects
+
+### Async Policy
+
+Controls if transition waits for resolve:
+
+```typescript
+resolvePolicy: {
+  async: 'WAIT'     // Wait for resolve (default)
+               // or 'NOWAIT' to continue without waiting
+}
+```
+
+**WAIT (default):**
+- Transition waits for resolve to complete
+- State doesn't activate until data is ready
+- Views render with data available
+
+**NOWAIT:**
+- Transition continues immediately
+- State activates without waiting
+- Views must handle loading state
+
+### State-Level Policy
+
+Set default policy for all resolves in a state:
+
+```typescript
+router.stateRegistry.register({
+  name: 'dashboard',
+  resolvePolicy: {
+    when: 'EAGER',
+    async: 'WAIT'
+  },
+  resolve: {
+    data1: (Service1) => Service1.load(),
+    data2: (Service2) => Service2.load()
+    // Both use EAGER/WAIT policy
+  }
+});
+```
+
+### Per-Resolve Policy
+
+Override policy for individual resolves:
+
+```typescript
+resolve: [
+  {
+    token: 'critical',
+    deps: ['Service'],
+    resolveFn: (svc) => svc.loadCritical(),
+    policy: { when: 'EAGER', async: 'WAIT' }
+  },
+  {
+    token: 'optional',
+    deps: ['Service'],
+    resolveFn: (svc) => svc.loadOptional(),
+    policy: { when: 'LAZY', async: 'NOWAIT' }
+  }
+]
+```
+
+## Accessing Resolved Data
+
+### In Views (Framework-Specific)
+
+Resolved data is injected into views/components based on the framework.
+
+### In Transition Hooks
+
+```typescript
+transitionService.onEnter({ entering: 'user' }, (transition) => {
+  // Get all resolved data for 'user' state
+  const injector = transition.injector();
+  const user = injector.get('user');
+  
+  console.log('User:', user);
+});
+```
+
+### Async Access
+
+```typescript
+transitionService.onBefore({ to: 'dashboard' }, async (transition) => {
+  const injector = transition.injector();
+  
+  // Wait for resolve to complete
+  const user = await injector.getAsync('user');
+  
+  console.log('User loaded:', user);
+});
+```
+
+### In Child Resolves
+
+As shown earlier, child resolves can inject parent resolves as dependencies.
+
+## Error Handling
+
+### Resolve Errors
+
+If a resolve rejects, the transition is aborted:
+
+```typescript
+resolve: {
+  user: (UserService, $transition$) => {
+    const userId = $transition$.params().userId;
+    return UserService.getUser(userId);
+    // If this promise rejects, transition aborts
+  }
+}
+```
+
+### Catching Errors
+
+```typescript
+// In resolve function
+resolve: {
+  user: async (UserService, $transition$) => {
+    try {
+      const userId = $transition$.params().userId;
+      return await UserService.getUser(userId);
+    } catch (error) {
+      console.error('Failed to load user:', error);
+      // Return default value or rethrow
+      return null;
+    }
+  }
+}
+
+// In transition hook
+transitionService.onError({}, (transition) => {
+  const error = transition.error();
+  console.error('Transition failed:', error);
+  
+  // Redirect to error page
+  return router.stateService.target('error', {
+    message: error.message
+  });
+});
+```
+
+## Common Patterns
+
+### Loading User Data
+
+```typescript
+resolve: {
+  currentUser: (AuthService) => {
+    return AuthService.getCurrentUser();
+  }
+}
+```
+
+### Loading Entity by ID
+
+```typescript
+resolve: {
+  article: (ArticleService, $transition$) => {
+    const id = $transition$.params().articleId;
+    return ArticleService.getById(id);
+  }
+}
+```
+
+### Loading List Data
+
+```typescript
+resolve: {
+  products: (ProductService, $transition$) => {
+    const params = $transition$.params();
+    return ProductService.list({
+      category: params.category,
+      page: params.page,
+      sort: params.sort
+    });
+  }
+}
+```
+
+### Dependent Resolves
+
+```typescript
+resolve: {
+  user: (UserService, $transition$) => {
+    return UserService.get($transition$.params().userId);
+  },
+  
+  posts: (user, PostService) => {
+    return PostService.getForUser(user.id);
+  },
+  
+  comments: (posts, CommentService) => {
+    const postIds = posts.map(p => p.id);
+    return CommentService.getForPosts(postIds);
+  }
+}
+```
+
+### Parallel Loading
+
+```typescript
+resolve: {
+  // These load in parallel
+  users: (UserService) => UserService.list(),
+  products: (ProductService) => ProductService.list(),
+  orders: (OrderService) => OrderService.list()
+}
+```
+
+### Conditional Loading
+
+```typescript
+resolve: {
+  userData: ($transition$, UserService, GuestService) => {
+    const userId = $transition$.params().userId;
+    
+    if (userId === 'guest') {
+      return GuestService.getGuestData();
+    }
+    
+    return UserService.get(userId);
+  }
+}
+```
+
+### Caching Resolves
+
+```typescript
+let cachedConfig = null;
+
+resolve: {
+  config: async (ConfigService) => {
+    if (cachedConfig) {
+      return cachedConfig;
+    }
+    
+    cachedConfig = await ConfigService.load();
+    return cachedConfig;
+  }
+}
+```
+
+## Pre-Resolved Data
+
+Provide data without a resolve function:
+
+```typescript
+resolve: [
+  {
+    token: 'staticData',
+    resolveFn: null,
+    data: { key: 'value' }  // Already resolved
+  }
+]
+```
+
+## Dynamic Resolves
+
+Add resolves programmatically:
+
+```typescript
+transitionService.onCreate({}, (transition) => {
+  // Add resolve during transition
+  const resolves = transition.injector().get('$resolve$');
+  
+  // Add custom resolvable
+  const customResolvable = new Resolvable(
+    'dynamicData',
+    () => loadDynamicData(),
+    []
+  );
+  
+  resolves.push(customResolvable);
+});
+```
+
+## Best Practices
+
+<Steps>
+
+### Keep resolves focused
+
+```typescript
+// Good - single responsibility
+resolve: {
+  user: (UserService) => UserService.current(),
+  permissions: (PermissionService) => PermissionService.load()
+}
+
+// Avoid - doing too much
+resolve: {
+  everything: (Services) => loadEverything()
+}
+```
+
+### Use appropriate policies
+
+```typescript
+// EAGER for critical data
+resolvePolicy: { when: 'EAGER' }
+
+// LAZY for most data (default)
+resolvePolicy: { when: 'LAZY' }
+```
+
+### Handle errors gracefully
+
+```typescript
+resolve: {
+  user: async (UserService) => {
+    try {
+      return await UserService.load();
+    } catch (error) {
+      console.error(error);
+      return null;  // Provide fallback
+    }
+  }
+}
+```
+
+### Leverage resolve dependencies
+
+```typescript
+// Good - declarative dependencies
+resolve: {
+  user: (UserService) => UserService.current(),
+  profile: (user, ProfileService) => ProfileService.get(user.id)
+}
+
+// Avoid - nested promises
+resolve: {
+  data: async (UserService, ProfileService) => {
+    const user = await UserService.current();
+    const profile = await ProfileService.get(user.id);
+    return { user, profile };
+  }
+}
+```
+
+### Use parent resolves in abstract states
+
+```typescript
+// Abstract parent
+{
+  name: 'app',
+  abstract: true,
+  resolve: {
+    config: () => loadAppConfig()
+  }
+}
+
+// Children inherit config
+{
+  name: 'app.home',
+  resolve: {
+    data: (config, DataService) => DataService.load(config)
+  }
+}
+```
+
+</Steps>
+
+## Related Documentation
+
+- [State Configuration](/guides/state-configuration) - Define resolves in states
+- [Transition Hooks](/guides/transition-hooks) - Access resolves in hooks
+- [Nested States](/guides/nested-states) - Resolve inheritance
+
+## API Reference
+
+- [Resolvable](/api/resolvable) - Resolve implementation
+- [ResolveContext](/api/resolve-context) - Resolve context

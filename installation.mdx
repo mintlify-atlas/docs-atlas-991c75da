@@ -1,0 +1,284 @@
+---
+title: Installation
+description: Install and configure UI-Router Core in your JavaScript project
+---
+
+## Package Installation
+
+Install UI-Router Core using your preferred package manager:
+
+<CodeGroup>
+```bash npm
+npm install @uirouter/core
+```
+
+```bash yarn
+yarn add @uirouter/core
+```
+
+```bash pnpm
+pnpm add @uirouter/core
+```
+</CodeGroup>
+
+<Note>
+UI-Router Core requires Node.js version 4.0.0 or higher.
+</Note>
+
+## Package Contents
+
+The `@uirouter/core` package includes multiple build formats to support different module systems and use cases:
+
+### Module Formats
+
+<CodeGroup>
+```javascript CommonJS (lib/)
+import { UIRouter } from '@uirouter/core';
+// Uses: lib/index.js
+```
+
+```javascript ES Modules (lib-esm/)
+import { UIRouter } from '@uirouter/core';
+// Uses: lib-esm/index.js (when supported)
+```
+
+```html UMD Bundle
+<script src="node_modules/@uirouter/core/_bundles/ui-router-core.js"></script>
+<script>
+  const router = new window['@uirouter/core'].UIRouter();
+</script>
+```
+</CodeGroup>
+
+### TypeScript Support
+
+UI-Router Core is written in TypeScript and includes full type definitions:
+
+```json package.json
+{
+  "typings": "lib/index.d.ts",
+  "main": "lib/index.js",
+  "module": "lib-esm/index.js"
+}
+```
+
+Type definitions are automatically available when you install the package. No additional `@types` package is needed.
+
+## TypeScript Configuration
+
+If you're using TypeScript, ensure your `tsconfig.json` includes these settings:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "lib": ["es2015", "dom"],
+    "target": "es5",
+    "module": "commonjs"
+  }
+}
+```
+
+<Tip>
+UI-Router Core supports TypeScript 3.9 and later. The package includes downleveled type definitions for compatibility.
+</Tip>
+
+## Basic Setup
+
+After installation, import and create a UIRouter instance:
+
+<Steps>
+  <Step title="Import UIRouter">
+    Import the UIRouter class from the package:
+
+    ```typescript
+    import { UIRouter } from '@uirouter/core';
+    ```
+  </Step>
+
+  <Step title="Create router instance">
+    Instantiate the UIRouter class:
+
+    ```typescript
+    const router = new UIRouter();
+    ```
+
+    <Note>
+    The basic UIRouter constructor creates a router without location services. For browser-based routing, you'll need to add a location plugin (see next step).
+    </Note>
+  </Step>
+
+  <Step title="Add location plugin">
+    For browser-based applications, install a location service plugin:
+
+    ```typescript
+    import { UIRouter } from '@uirouter/core';
+    import { pushStateLocationPlugin } from '@uirouter/core';
+
+    const router = new UIRouter();
+    router.plugin(pushStateLocationPlugin);
+    ```
+
+    Available location plugins:
+    - `pushStateLocationPlugin` - HTML5 pushState (recommended)
+    - `hashLocationPlugin` - Hash-based routing (#/path)
+    - `memoryLocationPlugin` - In-memory routing (testing)
+  </Step>
+</Steps>
+
+## Location Service Plugins
+
+UI-Router Core provides three built-in location service plugins:
+
+### Push State Location (Recommended)
+
+Uses the HTML5 History API (`history.pushState` and `history.replaceState`) for clean URLs:
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+import { pushStateLocationPlugin } from '@uirouter/core';
+
+const router = new UIRouter();
+router.plugin(pushStateLocationPlugin);
+
+// Clean URLs: /app/dashboard
+```
+
+<Note>
+PushState routing requires server configuration to return `index.html` for all routes. See your server's documentation for details.
+</Note>
+
+### Hash Location
+
+Uses the URL hash (`#`) for routing, compatible with all browsers and requires no server configuration:
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+import { hashLocationPlugin } from '@uirouter/core';
+
+const router = new UIRouter();
+router.plugin(hashLocationPlugin);
+
+// Hash URLs: #!/app/dashboard
+```
+
+### Memory Location
+
+Stores location in memory without modifying the browser URL. Useful for testing or non-browser environments:
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+import { memoryLocationPlugin } from '@uirouter/core';
+
+const router = new UIRouter();
+router.plugin(memoryLocationPlugin);
+
+// No URL changes, routing state in memory only
+```
+
+## Services Plugin
+
+For vanilla JavaScript applications, you may also want to include the services plugin, which provides basic dependency injection and promise support:
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+import { servicesPlugin, pushStateLocationPlugin } from '@uirouter/core';
+
+const router = new UIRouter();
+router.plugin(servicesPlugin);
+router.plugin(pushStateLocationPlugin);
+```
+
+<Note>
+The services plugin provides `$q` (promise implementation) and `$injector` (dependency injection) for vanilla JavaScript. Framework-specific implementations typically provide their own services.
+</Note>
+
+## Advanced: Custom Location Services
+
+You can create a router with custom location services by passing them to the constructor:
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+import { LocationServices, LocationConfig } from '@uirouter/core';
+
+class CustomLocationService implements LocationServices {
+  url(newUrl?: string): string {
+    // Custom implementation
+  }
+  
+  path(): string {
+    // Custom implementation
+  }
+  
+  search(): { [key: string]: any } {
+    // Custom implementation
+  }
+  
+  hash(): string {
+    // Custom implementation
+  }
+  
+  onChange(callback: Function) {
+    // Custom implementation
+  }
+}
+
+const customLocationService = new CustomLocationService();
+const customLocationConfig = new CustomLocationConfig();
+
+const router = new UIRouter(customLocationService, customLocationConfig);
+```
+
+## Framework-Specific Installation
+
+For framework-specific implementations, use the appropriate package instead:
+
+<CodeGroup>
+```bash Angular
+npm install @uirouter/angular
+```
+
+```bash React  
+npm install @uirouter/react
+```
+
+```bash AngularJS
+npm install @uirouter/angularjs
+```
+
+```bash Vue
+npm install @uirouter/vue
+```
+</CodeGroup>
+
+<Warning>
+Do not install both `@uirouter/core` and a framework-specific package. The framework packages include the core as a dependency.
+</Warning>
+
+## Verification
+
+Verify your installation by checking the router instance:
+
+```typescript
+import { UIRouter } from '@uirouter/core';
+import { pushStateLocationPlugin } from '@uirouter/core';
+
+const router = new UIRouter();
+router.plugin(pushStateLocationPlugin);
+
+// Check router services are available
+console.log('StateRegistry:', router.stateRegistry);
+console.log('StateService:', router.stateService);
+console.log('URLService:', router.urlService);
+console.log('TransitionService:', router.transitionService);
+```
+
+You should see objects logged for each service, confirming successful installation.
+
+## Next Steps
+
+Now that you have UI-Router Core installed, continue to the quickstart guide:
+
+<Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+  Build a complete working router with state registration and navigation
+</Card>

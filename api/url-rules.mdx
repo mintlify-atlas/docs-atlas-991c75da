@@ -1,0 +1,210 @@
+---
+title: UrlRules
+description: API for managing URL rules
+---
+
+The `UrlRules` API is used to create and manage URL rules. URL rules are a mechanism to respond to specific URL patterns.
+
+## Overview
+
+Access the `UrlRules` API via `router.urlService.rules`.
+
+```typescript
+class UrlRules implements Disposable
+```
+
+## Properties
+
+### urlRuleFactory
+
+```typescript
+public urlRuleFactory: UrlRuleFactory
+```
+
+Used to create `UrlRule` objects for common cases.
+
+## Methods
+
+### when()
+
+Registers a matcher and handler for custom URL handling.
+
+```typescript
+public when(
+  matcher: RegExp | UrlMatcher | string,
+  handler: string | UrlRuleHandlerFn,
+  options?: { priority: number }
+): UrlRule
+```
+
+**Parameters:**
+- `matcher` - A pattern to match (string compiled as UrlMatcher, or RegExp)
+- `handler` - The redirect path or handler function
+- `options` - Optional configuration (e.g., `{ priority: 1 }`)
+
+**Returns:** The registered `UrlRule`
+
+**Example (string redirect):**
+```javascript
+// When the URL is /foo/123, redirect to /bar/123
+urlService.rules.when("/foo/:param1", "/bar/:param1");
+```
+
+**Example (RegExp redirect):**
+```javascript
+// When the URL is /foo/123, redirect to /bar/123
+urlService.rules.when(new RegExp("^/foo/(.*)"), "/bar/$1");
+```
+
+**Example (handler function):**
+```javascript
+urlService.rules.when(
+  new RegExp("^/foo/(.*)"),
+  match => "/bar/" + match[1]
+);
+```
+
+### otherwise()
+
+Defines the state, URL, or behavior to use when no other rule matches.
+
+```typescript
+public otherwise(
+  handler: string | UrlRuleHandlerFn | TargetState | TargetStateDef
+): void
+```
+
+**Parameters:**
+- `handler` - The URL path to redirect to, a state definition, or a handler function
+
+This rule is matched when no other rule matches. It's generally used to handle unknown URLs (404-like behavior).
+
+**Example (URL redirect):**
+```javascript
+// When no other url rule matches, redirect to /index
+urlService.rules.otherwise('/index');
+```
+
+**Example (state):**
+```javascript
+// When no other url rule matches, go to 'home' state
+urlService.rules.otherwise({ state: 'home', params: { dashboard: 'default' } });
+```
+
+**Example (function):**
+```javascript
+urlService.rules.otherwise((matchValue, urlParts, router) => {
+  return { state: 'home' };
+});
+```
+
+### initial()
+
+Defines the initial state, path, or behavior when the app starts.
+
+```typescript
+public initial(
+  handler: string | UrlRuleHandlerFn | TargetState | TargetStateDef
+): void
+```
+
+**Parameters:**
+- `handler` - The initial state or URL path, or a handler function
+
+This rule is triggered the first time the URL is checked (when the app initially loads), and only when the URL matches `""` or `"/"`.
+
+**Example (state):**
+```javascript
+// Start app at 'home' state
+urlService.rules.initial({ state: 'home' });
+```
+
+**Example (URL):**
+```javascript
+// Start app at /home (by url)
+urlService.rules.initial('/home');
+```
+
+### rule()
+
+Manually adds a URL rule.
+
+```typescript
+public rule(rule: UrlRule): Function
+```
+
+**Parameters:**
+- `rule` - A `UrlRule` object
+
+**Returns:** A function that deregisters the rule when called.
+
+Usually, a URL rule is added using `StateDeclaration.url` or `when()`. This API can be used directly for more control.
+
+**Example:**
+```javascript
+const rule = {
+  match: (url) => url.path === '/custom',
+  handler: (match) => ({ state: 'custom' }),
+  priority: 10,
+  matchPriority: () => 0
+};
+
+const deregister = urlService.rules.rule(rule);
+
+// Later...
+deregister();
+```
+
+### removeRule()
+
+Removes a previously registered rule.
+
+```typescript
+public removeRule(rule: UrlRule): void
+```
+
+**Parameters:**
+- `rule` - The rule that was previously registered
+
+### rules()
+
+Gets all registered rules.
+
+```typescript
+public rules(): UrlRule[]
+```
+
+**Returns:** An array of all registered rules (including the `otherwise` rule if defined)
+
+### sort()
+
+Defines URL rule priorities using a custom comparison function.
+
+```typescript
+public sort(compareFn?: (a: UrlRule, b: UrlRule) => number): void
+```
+
+**Parameters:**
+- `compareFn` - A function that compares two `UrlRule` objects (optional)
+
+If called without a parameter, it re-sorts the rules using the current sort function.
+
+The default sort function prioritizes rules by:
+1. Explicit priority
+2. Rule type (STATE: 4, URLMATCHER: 4, REGEXP: 3, RAW: 2, OTHER: 1)
+3. `UrlMatcher` specificity
+4. Registration order
+
+**Example:**
+```javascript
+// Prioritize by registration order
+function compareFn(a, b) {
+  return a.$id - b.$id;
+}
+urlService.rules.sort(compareFn);
+```
+
+## Related
+
+- [UrlService](/api/url-service)
+- [UrlMatcher](/api/url-matcher)

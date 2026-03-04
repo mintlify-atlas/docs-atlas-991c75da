@@ -1,0 +1,579 @@
+---
+title: Nested States
+description: Creating and managing nested state hierarchies with dot notation in UI-Router Core
+---
+
+# Nested States
+
+Nested states allow you to build hierarchical application structures where child states inherit configuration from parent states. This is one of UI-Router's most powerful features.
+
+## State Hierarchy Basics
+
+States can be nested using dot notation in the state name:
+
+```typescript
+// Parent state
+router.stateRegistry.register({
+  name: 'app',
+  url: '/app',
+  component: AppComponent
+});
+
+// Child state - inherits from 'app'
+router.stateRegistry.register({
+  name: 'app.dashboard',
+  url: '/dashboard',
+  component: DashboardComponent
+});
+
+// Grandchild state - inherits from 'app.dashboard'
+router.stateRegistry.register({
+  name: 'app.dashboard.stats',
+  url: '/stats',
+  component: StatsComponent
+});
+```
+
+The resulting hierarchy:
+- `app` (/app)
+  - `app.dashboard` (/app/dashboard)
+    - `app.dashboard.stats` (/app/dashboard/stats)
+
+## Dot Notation
+
+Dot notation automatically creates parent-child relationships:
+
+```typescript
+// These dots define the hierarchy
+'app.users.list'         // 'list' is a child of 'users', which is a child of 'app'
+'app.users.detail'       // 'detail' is a sibling of 'list'
+'app.users.detail.edit'  // 'edit' is a child of 'detail'
+```
+
+**Rules:**
+- Child state names must start with parent name + dot
+- Parent state must exist before registering child
+- Dots create the hierarchy, not the URL structure
+
+## Explicit Parent Declaration
+
+Alternatively, explicitly set the parent:
+
+```typescript
+// Without dot notation in name
+router.stateRegistry.register({
+  name: 'parent',
+  url: '/parent'
+});
+
+router.stateRegistry.register({
+  name: 'child',
+  parent: 'parent',  // Explicit parent reference
+  url: '/child'
+});
+
+// Also works with object reference
+const parentState = { name: 'parent', url: '/parent' };
+const childState = {
+  name: 'child',
+  parent: parentState,
+  url: '/child'
+};
+```
+
+**When to use explicit parent:**
+- Shorter state names ("settings" vs "app.user.settings")
+- Dynamic state registration
+- Avoiding deep nesting in state names
+
+## URL Inheritance
+
+Child URLs are appended to parent URLs:
+
+```typescript
+router.stateRegistry.register({
+  name: 'app',
+  url: '/app'
+});
+
+router.stateRegistry.register({
+  name: 'app.users',
+  url: '/users'  // Becomes /app/users
+});
+
+router.stateRegistry.register({
+  name: 'app.users.detail',
+  url: '/:userId'  // Becomes /app/users/:userId
+});
+```
+
+**Resulting URLs:**
+- `app`: `/app`
+- `app.users`: `/app/users`
+- `app.users.detail`: `/app/users/123`
+
+### Absolute URLs
+
+Override URL inheritance with `^`:
+
+```typescript
+router.stateRegistry.register({
+  name: 'app.help',
+  url: '^/help'  // Absolute URL, ignores parent
+  // URL is /help, not /app/help
+});
+```
+
+## Parameter Inheritance
+
+Child states inherit parent parameters:
+
+```typescript
+router.stateRegistry.register({
+  name: 'workspace',
+  url: '/workspace/:workspaceId',
+  params: {
+    workspaceId: { type: 'int' }
+  }
+});
+
+router.stateRegistry.register({
+  name: 'workspace.project',
+  url: '/project/:projectId',
+  params: {
+    projectId: { type: 'int' }
+  }
+  // Inherits workspaceId parameter
+});
+
+// Navigate to workspace.project
+stateService.go('workspace.project', {
+  workspaceId: 1,  // Required from parent
+  projectId: 5     // Required from this state
+});
+// URL: /workspace/1/project/5
+```
+
+## Resolve Inheritance
+
+Child states can use parent resolves:
+
+```typescript
+router.stateRegistry.register({
+  name: 'app',
+  resolve: {
+    user: (AuthService) => AuthService.getCurrentUser()
+  }
+});
+
+router.stateRegistry.register({
+  name: 'app.settings',
+  resolve: {
+    // Can inject 'user' from parent
+    preferences: (user, PreferenceService) => {
+      return PreferenceService.getForUser(user.id);
+    }
+  }
+});
+```
+
+See [Resolve Guide](/guides/resolve) for more details.
+
+## Data Inheritance
+
+The `data` property uses prototypal inheritance:
+
+```typescript
+router.stateRegistry.register({
+  name: 'admin',
+  data: {
+    requiresAuth: true,
+    roles: ['admin']
+  }
+});
+
+router.stateRegistry.register({
+  name: 'admin.users',
+  data: {
+    title: 'User Management'
+  }
+  // Inherits requiresAuth and roles from parent
+});
+
+// Access in hooks
+transitionService.onBefore({ to: 'admin.**' }, (transition) => {
+  const data = transition.to().data;
+  console.log(data.requiresAuth);  // true
+  console.log(data.roles);         // ['admin']
+  console.log(data.title);         // 'User Management' (if going to admin.users)
+});
+```
+
+## Abstract States
+
+Abstract states cannot be activated directly but provide shared configuration:
+
+```typescript
+router.stateRegistry.register({
+  name: 'app',
+  abstract: true,  // Cannot navigate directly to this state
+  url: '/app',
+  resolve: {
+    config: () => loadAppConfig()
+  },
+  data: {
+    requiresAuth: true
+  }
+});
+
+// Concrete child states can be activated
+router.stateRegistry.register({
+  name: 'app.home',
+  url: '/home'
+  // Inherits all parent configuration
+});
+
+// This will fail - cannot activate abstract state
+stateService.go('app');  // Error!
+
+// This works - activates concrete state
+stateService.go('app.home');  // Success
+```
+
+**Use abstract states for:**
+- Shared layouts
+- Common resolves
+- Authentication wrappers
+- Shared URL prefixes
+
+## View Nesting
+
+Nested states create nested views (framework-specific):
+
+```typescript
+// Parent state with ui-view
+router.stateRegistry.register({
+  name: 'app',
+  template: `
+    <div class="app-layout">
+      <header>App Header</header>
+      <ui-view></ui-view>  <!-- Child views render here -->
+    </div>
+  `
+});
+
+// Child state content appears in parent's ui-view
+router.stateRegistry.register({
+  name: 'app.home',
+  template: '<div>Home Content</div>'
+});
+
+// Grandchild also needs ui-view in parent
+router.stateRegistry.register({
+  name: 'app.users',
+  template: `
+    <div>
+      <h1>Users</h1>
+      <ui-view></ui-view>  <!-- For app.users.* states -->
+    </div>
+  `
+});
+
+router.stateRegistry.register({
+  name: 'app.users.list',
+  template: '<div>User List</div>'
+});
+```
+
+## State Activation
+
+When activating a child state, all parent states activate:
+
+```typescript
+// Navigate to deeply nested state
+stateService.go('app.admin.users.detail', { userId: 123 });
+
+// Activates in order:
+// 1. app
+// 2. app.admin
+// 3. app.admin.users
+// 4. app.admin.users.detail
+
+// Each state's resolves and hooks execute
+// Views render from parent to child
+```
+
+## State Retention
+
+States are retained when navigating between siblings:
+
+```typescript
+// Current active states: app, app.users, app.users.list
+
+stateService.go('app.users.detail', { userId: 123 });
+
+// Retained: app, app.users (parameters unchanged)
+// Exited: app.users.list
+// Entered: app.users.detail
+
+// 'app' and 'app.users' don't reload
+// Their resolves are not re-fetched
+// Their views are not re-rendered
+```
+
+## Relative Navigation
+
+Navigate relative to current state:
+
+```typescript
+// Current state: 'app.users.list'
+
+// Go to sibling
+stateService.go('^.detail', { userId: 123 });
+// Goes to: 'app.users.detail'
+
+// Go to parent
+stateService.go('^');
+// Goes to: 'app.users'
+
+// Go to child
+stateService.go('.filters');
+// Goes to: 'app.users.list.filters'
+
+// Go up multiple levels
+stateService.go('^^');
+// Goes to: 'app'
+```
+
+See [Navigation Guide](/guides/navigation#relative-navigation) for details.
+
+## Common Patterns
+
+### Application Layout Pattern
+
+```typescript
+// Abstract parent for layout
+router.stateRegistry.register({
+  name: 'app',
+  abstract: true,
+  component: AppLayoutComponent,
+  resolve: {
+    currentUser: (AuthService) => AuthService.getCurrentUser()
+  }
+});
+
+// Concrete child states
+router.stateRegistry.register({
+  name: 'app.home',
+  url: '/home',
+  component: HomeComponent
+});
+
+router.stateRegistry.register({
+  name: 'app.about',
+  url: '/about',
+  component: AboutComponent
+});
+```
+
+### Feature Module Pattern
+
+```typescript
+// Feature root
+router.stateRegistry.register({
+  name: 'users',
+  abstract: true,
+  url: '/users',
+  resolve: {
+    usersModule: () => import('./users.module')
+  }
+});
+
+// Feature states
+router.stateRegistry.register({
+  name: 'users.list',
+  url: '',
+  component: UserListComponent
+});
+
+router.stateRegistry.register({
+  name: 'users.detail',
+  url: '/:userId',
+  component: UserDetailComponent
+});
+
+router.stateRegistry.register({
+  name: 'users.detail.edit',
+  url: '/edit',
+  component: UserEditComponent
+});
+```
+
+### Tab Navigation Pattern
+
+```typescript
+// Parent with tabs
+router.stateRegistry.register({
+  name: 'dashboard',
+  url: '/dashboard',
+  template: `
+    <div>
+      <nav>
+        <a ui-sref=".overview">Overview</a>
+        <a ui-sref=".analytics">Analytics</a>
+        <a ui-sref=".reports">Reports</a>
+      </nav>
+      <ui-view></ui-view>
+    </div>
+  `
+});
+
+// Tab child states
+router.stateRegistry.register({
+  name: 'dashboard.overview',
+  url: '/overview',
+  component: OverviewComponent
+});
+
+router.stateRegistry.register({
+  name: 'dashboard.analytics',
+  url: '/analytics',
+  component: AnalyticsComponent
+});
+
+router.stateRegistry.register({
+  name: 'dashboard.reports',
+  url: '/reports',
+  component: ReportsComponent
+});
+```
+
+### Multi-Level Data Pattern
+
+```typescript
+// Workspace level
+router.stateRegistry.register({
+  name: 'workspace',
+  url: '/workspace/:workspaceId',
+  resolve: {
+    workspace: (WorkspaceService, $transition$) => {
+      return WorkspaceService.get($transition$.params().workspaceId);
+    }
+  }
+});
+
+// Project level
+router.stateRegistry.register({
+  name: 'workspace.project',
+  url: '/project/:projectId',
+  resolve: {
+    project: (workspace, ProjectService, $transition$) => {
+      return ProjectService.get(
+        workspace.id,
+        $transition$.params().projectId
+      );
+    }
+  }
+});
+
+// Task level
+router.stateRegistry.register({
+  name: 'workspace.project.task',
+  url: '/task/:taskId',
+  resolve: {
+    task: (project, TaskService, $transition$) => {
+      return TaskService.get(
+        project.id,
+        $transition$.params().taskId
+      );
+    }
+  }
+});
+```
+
+## Best Practices
+
+<Steps>
+
+### Use abstract states for layouts
+
+```typescript
+// Good - abstract parent provides layout
+{
+  name: 'app',
+  abstract: true,
+  component: LayoutComponent
+}
+
+// Avoid - repeating layout in each state
+```
+
+### Keep state hierarchies shallow
+
+```typescript
+// Good - 3 levels
+'app.users.detail'
+
+// Avoid - too deep
+'app.admin.workspace.users.detail.settings.preferences'
+```
+
+### Use meaningful state names
+
+```typescript
+// Good
+'app.users.detail'
+'app.products.edit'
+
+// Avoid
+'app.view1.page2'
+```
+
+### Group related states
+
+```typescript
+// Good - grouped by feature
+'products.list'
+'products.detail'
+'products.edit'
+
+// Less organized
+'productList'
+'productDetail'
+'productEdit'
+```
+
+### Leverage parameter inheritance
+
+```typescript
+// Parent defines shared param
+{
+  name: 'user',
+  url: '/users/:userId'
+}
+
+// Children automatically inherit userId
+{
+  name: 'user.profile',
+  url: '/profile'
+}
+{
+  name: 'user.settings',
+  url: '/settings'
+}
+```
+
+</Steps>
+
+## Related Documentation
+
+- [State Configuration](/guides/state-configuration) - Configure individual states
+- [Navigation](/guides/navigation) - Navigate between nested states
+- [URL Routing](/guides/url-routing) - URL composition in hierarchies
+- [Resolve](/guides/resolve) - Resolve inheritance
+
+## API Reference
+
+- [StateDeclaration](/api/state-declaration) - State configuration including `parent` and `abstract`
+- [StateRegistry](/api/state-registry) - Register nested states
+- [StateObject](/api/state-object) - Access state hierarchy information

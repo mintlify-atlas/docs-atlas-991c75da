@@ -1,0 +1,235 @@
+---
+title: UrlService
+description: API for URL management
+---
+
+The `UrlService` provides an API for managing URLs in UI-Router. It combines URL configuration, URL rules management, and low-level URL read/write operations.
+
+## Overview
+
+The `UrlService` is the primary API for URL management. Access it via `router.urlService`.
+
+```typescript
+class UrlService implements LocationServices, UrlSyncApi
+```
+
+## Properties
+
+### rules
+
+```typescript
+public rules: UrlRules
+```
+
+The nested [UrlRules](/api/url-rules) API for managing URL rules and rewrites.
+
+### config
+
+```typescript
+public config: UrlConfig
+```
+
+The nested [UrlConfig](/api/url-config) API to configure the URL and retrieve URL information.
+
+## Methods
+
+### parts()
+
+Gets the current URL parts.
+
+```typescript
+public parts(): UrlParts
+```
+
+**Returns:** An object containing the URL `path`, `search`, and `hash` parts.
+
+**Example:**
+```javascript
+const parts = urlService.parts();
+// { path: '/foo/bar', search: { param: 'value' }, hash: 'anchor' }
+```
+
+### sync()
+
+Activates the best rule for the current URL.
+
+```typescript
+public sync(evt?): void
+```
+
+This method checks the current URL for a matching URL rule, then invokes that rule's handler. It is called internally any time the URL has changed.
+
+**Example:**
+```javascript
+urlService.deferIntercept();
+
+fetch('/states.json').then(resp => resp.json()).then(data => {
+  data.forEach(state => $stateRegistry.register(state));
+  urlService.listen();
+  // Find the matching URL and invoke the handler.
+  urlService.sync();
+});
+```
+
+### listen()
+
+Starts or stops listening for URL changes.
+
+```typescript
+public listen(enabled?: boolean): Function
+```
+
+**Parameters:**
+- `enabled` - `true` or `false` to start or stop listening to URL changes
+
+**Returns:** A function that stops listening when called.
+
+**Example:**
+```javascript
+urlService.deferIntercept();
+
+fetch('/states.json').then(resp => resp.json()).then(data => {
+  data.forEach(state => $stateRegistry.register(state));
+  // Start responding to URL changes
+  urlService.listen();
+  urlService.sync();
+});
+```
+
+### deferIntercept()
+
+Disables monitoring of the URL.
+
+```typescript
+public deferIntercept(defer?: boolean): void
+```
+
+Call this method before UI-Router has bootstrapped to stop UI-Router from performing the initial URL sync. Once initialization is complete, call [listen()](#listen) to tell UI-Router to start watching and synchronizing the URL.
+
+**Parameters:**
+- `defer` - Indicates whether to defer location change interception (defaults to `true`)
+
+**Example:**
+```javascript
+// Prevent UI-Router from automatically intercepting URL changes when it starts
+urlService.deferIntercept();
+
+fetch('/states.json').then(resp => resp.json()).then(data => {
+  data.forEach(state => $stateRegistry.register(state));
+  urlService.listen();
+  urlService.sync();
+});
+```
+
+### match()
+
+Matches a URL against all registered rules.
+
+```typescript
+public match(url: UrlParts): MatchResult
+```
+
+**Parameters:**
+- `url` - A `UrlParts` object containing `path`, `search`, and `hash`
+
+**Returns:** The best matching rule and match result, or `undefined` if no rule matched.
+
+### url()
+
+Gets or updates the URL.
+
+```typescript
+public url(newurl?: string, replace?: boolean, state?: any): string
+```
+
+**Parameters:**
+- `newurl` - The new URL value (optional)
+- `replace` - When true, replaces the current history entry instead of appending (optional)
+- `state` - The history's state object (optional)
+
+**Returns:** The current URL.
+
+**Example (get):**
+```javascript
+urlService.url(); // "/some/path?query=value#anchor"
+```
+
+**Example (set):**
+```javascript
+urlService.url("/some/path?query=value#anchor", true);
+```
+
+### path()
+
+Gets the path part of the current URL.
+
+```typescript
+public path(): string
+```
+
+**Returns:** The path portion of the URL.
+
+**Example:**
+```javascript
+// If URL is "/some/path?query=value#anchor"
+urlService.path(); // "/some/path"
+```
+
+### search()
+
+Gets the search part of the current URL as an object.
+
+```typescript
+public search(): { [key: string]: any }
+```
+
+**Returns:** The search (query) portion of the URL as an object.
+
+**Example:**
+```javascript
+// If URL is "/some/path?query=value#anchor"
+urlService.search(); // { query: 'value' }
+```
+
+### hash()
+
+Gets the hash part of the current URL.
+
+```typescript
+public hash(): string
+```
+
+**Returns:** The hash (anchor) portion of the URL.
+
+**Example:**
+```javascript
+// If URL is "/some/path?query=value#anchor"
+urlService.hash(); // "anchor"
+```
+
+### onChange()
+
+Registers a low-level URL change handler.
+
+```typescript
+public onChange(callback: EventListener): Function
+```
+
+**Parameters:**
+- `callback` - A function called when the URL is changing
+
+**Returns:** A function that de-registers the callback.
+
+**Example:**
+```javascript
+let deregisterFn = urlService.onChange((evt) => console.log("url change", evt));
+
+// Later...
+deregisterFn();
+```
+
+## Related
+
+- [UrlConfig](/api/url-config)
+- [UrlRules](/api/url-rules)
+- [UrlMatcher](/api/url-matcher)

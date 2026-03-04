@@ -1,0 +1,763 @@
+---
+title: 'StateDeclaration'
+description: 'Interface for declaring and configuring states'
+---
+
+## Overview
+
+The `StateDeclaration` interface defines the configuration object for declaring states in UI-Router. Each state in your application is defined using this interface.
+
+## Core Properties
+
+### name
+
+The state name (required for registered states).
+
+```typescript
+name?: string
+```
+
+**Behavior**:
+- Must be unique across all registered states
+- Use dot notation for parent/child relationships: `'parent.child'`
+- Acts as the state's identifier
+
+**Example**:
+```typescript
+{ name: 'home' }
+{ name: 'about' }
+{ name: 'users.list' }
+{ name: 'users.detail' }
+```
+
+### url
+
+The URL fragment for the state.
+
+```typescript
+url?: string
+```
+
+**Behavior**:
+- Appended to parent state's URL to build full URL
+- Supports parameter syntax: `:param`, `{param}`, `{param:type}`
+- Supports query parameters: `?query&another`
+- Can use `^` to break URL inheritance
+
+**Example - Basic URL**:
+```typescript
+{ name: 'home', url: '/home' }
+```
+
+**Example - Path parameters**:
+```typescript
+// Parameter with default regexp
+{ name: 'users', url: '/users/:userId' }
+
+// Parameter with custom regexp
+{ name: 'books', url: '/books/{bookId:[a-zA-Z_-]}' }
+
+// Parameter with type
+{ name: 'category', url: '/category/{categoryId:int}' }
+
+// Multiple parameters
+{ name: 'publisher', url: '/books/{publishername:string}/{categoryId:int}' }
+```
+
+**Example - Query parameters**:
+```typescript
+// Basic query params
+{ name: 'messages', url: '/messages?before&after' }
+
+// Typed query params
+{ name: 'messages', url: '/messages?{before:date}&{after:date}' }
+
+// Combined path and query
+{ name: 'mailbox', url: '/messages/:mailboxid?{before:date}&{after:date}' }
+```
+
+### parent
+
+Explicitly sets the parent state.
+
+```typescript
+parent?: string | StateDeclaration
+```
+
+**Behavior**:
+- Normally implied from the state's name (e.g., `'parent.child'`)
+- Can be set explicitly to use shorter state names
+- Accepts parent state name (string) or parent state object
+
+**Example**:
+```typescript
+const parentState = {
+  name: 'parentstate'
+};
+
+const childState = {
+  name: 'childstate',
+  parent: 'parentstate'
+  // Or: parent: parentState
+};
+
+// Creates 'parentstate.childstate' hierarchy
+// Can reference as just 'childstate' in templates
+```
+
+### abstract
+
+Abstract state indicator.
+
+```typescript
+abstract?: boolean
+```
+
+**Behavior**:
+- Abstract states cannot be directly activated
+- Used to provide inherited properties to children
+- Useful for layouts, common resolves, and base configurations
+
+**Example**:
+```typescript
+// Layout state with abstract
+{
+  name: 'app',
+  abstract: true,
+  component: AppLayoutComponent
+}
+
+// Child states can be activated
+{ name: 'app.home', url: '/home' }
+{ name: 'app.about', url: '/about' }
+```
+
+## URL Parameters
+
+### params
+
+Parameter configuration object.
+
+```typescript
+params?: { [key: string]: ParamDeclaration | any }
+```
+
+**Behavior**:
+- Configures parameters declared in the URL
+- Defines additional non-URL parameters
+- Each key is a parameter name
+- Value can be a ParamDeclaration or shorthand
+
+**Example - Configure URL params**:
+```typescript
+{
+  name: 'users',
+  url: '/users/:userId',
+  params: {
+    userId: {
+      type: 'int',
+      value: null
+    }
+  }
+}
+```
+
+**Example - Non-URL params**:
+```typescript
+{
+  name: 'messages',
+  url: '/messages',
+  params: {
+    // Non-URL parameter (not in URL)
+    filter: {
+      value: 'inbox',
+      squash: true
+    },
+    // Array parameter
+    tags: {
+      type: 'int',
+      array: true,
+      value: []
+    }
+  }
+}
+```
+
+**Example - Shorthand syntax**:
+```typescript
+{
+  name: 'search',
+  url: '/search?query',
+  params: {
+    query: 'default',     // shorthand for { value: 'default' }
+    page: 1,
+    sort: 'name'
+  }
+}
+```
+
+### dynamic
+
+Marks all state parameters as dynamic.
+
+```typescript
+dynamic?: boolean
+```
+
+**Behavior**:
+- When `true`, all parameters use dynamic behavior by default
+- Dynamic params can change without triggering state reload
+- Individual parameters can override via `ParamDeclaration.dynamic`
+
+**Example**:
+```typescript
+{
+  name: 'products',
+  url: '/products?page&sort&filter',
+  dynamic: true,
+  // Changing page/sort/filter won't reload the state
+}
+```
+
+### reloadOnSearch
+
+Marks query parameters as dynamic.
+
+```typescript
+reloadOnSearch?: boolean
+```
+
+<Warning>
+Deprecated. Use `dynamic` or `ParamDeclaration.dynamic` instead.
+</Warning>
+
+## Data and Resolves
+
+### data
+
+Inherited property to store state metadata.
+
+```typescript
+data?: any
+```
+
+**Behavior**:
+- Child states' `data` prototypally inherit from parent state
+- Good for storing metadata like `requiresAuth`, `pageTitle`, etc.
+- Changes to parent `data` reflect in child `data`
+
+**Example**:
+```typescript
+// Parent state
+{
+  name: 'admin',
+  data: {
+    requiresAuth: true,
+    role: 'admin'
+  }
+}
+
+// Child inherits data
+{
+  name: 'admin.users',
+  data: {
+    pageTitle: 'User Management'
+  }
+  // Inherits requiresAuth and role from parent
+}
+```
+
+**Example - Using in hooks**:
+```typescript
+transitionService.onBefore({}, (trans) => {
+  const requiresAuth = trans.to().data?.requiresAuth;
+  if (requiresAuth && !isAuthenticated()) {
+    return trans.router.stateService.target('login');
+  }
+});
+```
+
+### resolve
+
+Asynchronously fetch data during transition.
+
+```typescript
+resolve?: ResolveTypes[] | { [key: string]: IInjectable }
+```
+
+**Behavior**:
+- Fetches data asynchronously when entering the state
+- Delays state activation until all resolves complete
+- Data available in views, hooks, and child state resolves
+- Retained until state is exited
+
+**Example - Array syntax (recommended)**:
+```typescript
+{
+  name: 'user',
+  url: '/user/:userId',
+  resolve: [
+    {
+      token: 'user',
+      deps: ['UserService', Transition],
+      resolveFn: (userService, trans) => {
+        return userService.fetchUser(trans.params().userId);
+      }
+    }
+  ]
+}
+```
+
+**Example - Object syntax (AngularJS style)**:
+```typescript
+{
+  name: 'users',
+  resolve: {
+    users: ['UserService', (userService) => {
+      return userService.list();
+    }],
+    // Or unannotated
+    currentUser: (AuthService) => AuthService.getCurrentUser()
+  }
+}
+```
+
+**Example - Resolve dependencies**:
+```typescript
+{
+  name: 'userPosts',
+  resolve: [
+    // First resolve
+    {
+      token: 'user',
+      deps: ['UserService', Transition],
+      resolveFn: (userService, trans) => 
+        userService.get(trans.params().userId)
+    },
+    // Second resolve depends on first
+    {
+      token: 'posts',
+      deps: ['PostService', 'user'],
+      resolveFn: (postService, user) => 
+        postService.getByUser(user.id)
+    }
+  ]
+}
+```
+
+### resolvePolicy
+
+Sets resolve policy defaults.
+
+```typescript
+resolvePolicy?: ResolvePolicy
+```
+
+**ResolvePolicy interface**:
+```typescript
+interface ResolvePolicy {
+  when?: 'LAZY' | 'EAGER';           // When to fetch
+  async?: 'WAIT' | 'NOWAIT' | CustomAsyncPolicy;  // Wait behavior
+}
+```
+
+**Values**:
+- `when: 'LAZY'` - Fetch just before entering state (default)
+- `when: 'EAGER'` - Fetch when transition starts
+- `async: 'WAIT'` - Wait for resolve before entering state (default)
+- `async: 'NOWAIT'` - Don't wait, resolve in background
+
+**Example**:
+```typescript
+{
+  name: 'products',
+  resolvePolicy: {
+    when: 'EAGER',    // Start fetching immediately
+    async: 'WAIT'     // Wait before entering
+  },
+  resolve: [
+    {
+      token: 'products',
+      deps: ['ProductService'],
+      resolveFn: (productService) => productService.list()
+    }
+  ]
+}
+```
+
+## Views
+
+### views
+
+Named views configuration.
+
+```typescript
+views?: { [key: string]: _ViewDeclaration }
+```
+
+**Behavior**:
+- Defines multiple views or targets specific named `ui-view`s
+- Each key is a view name or view target
+- Use `@` syntax to target ancestor state views
+
+**Example - Multiple views in parent template**:
+```typescript
+{
+  name: 'layout',
+  views: {
+    header: {
+      component: HeaderComponent
+    },
+    body: {
+      component: BodyComponent
+    },
+    footer: {
+      component: FooterComponent
+    }
+  }
+}
+```
+
+**Example - Target ancestor views**:
+```typescript
+{
+  name: 'messages.detail',
+  views: {
+    // Target header view in 'top' state
+    'header@top': {
+      component: MessageHeaderComponent
+    },
+    // Target body view in parent state
+    'body': {
+      component: MessageBodyComponent
+    }
+  }
+}
+```
+
+## Lifecycle Hooks
+
+### onEnter
+
+Transition hook called when entering the state.
+
+```typescript
+onEnter?: TransitionStateHookFn
+```
+
+**Signature**:
+```typescript
+type TransitionStateHookFn = (
+  transition: Transition,
+  state: StateDeclaration
+) => HookResult
+```
+
+**Example**:
+```typescript
+{
+  name: 'mystate',
+  onEnter: (trans, state) => {
+    console.log(`Entering ${state.name}`);
+    const myService = trans.injector().get('MyService');
+    myService.trackEntry(state.name);
+  }
+}
+```
+
+### onExit
+
+Transition hook called when exiting the state.
+
+```typescript
+onExit?: TransitionStateHookFn
+```
+
+**Example**:
+```typescript
+{
+  name: 'editor',
+  onExit: (trans, state) => {
+    const editorService = trans.injector().get('EditorService');
+    if (editorService.hasUnsavedChanges()) {
+      return editorService.confirmDiscard();
+    }
+  }
+}
+```
+
+### onRetain
+
+Transition hook called when state is retained.
+
+```typescript
+onRetain?: TransitionStateHookFn
+```
+
+**Example**:
+```typescript
+{
+  name: 'parent',
+  onRetain: (trans, state) => {
+    console.log(`${state.name} is still active`);
+  }
+}
+```
+
+## Redirection
+
+### redirectTo
+
+Synchronously or asynchronously redirect transitions.
+
+```typescript
+redirectTo?: 
+  | RedirectToResult 
+  | ((transition: Transition) => RedirectToResult)
+  | ((transition: Transition) => Promise<RedirectToResult>)
+```
+
+**RedirectToResult type**:
+```typescript
+type RedirectToResult = 
+  | string 
+  | TargetState 
+  | { state?: string; params?: RawParams } 
+  | void
+```
+
+**Behavior**:
+- Processed as `onStart` hook, before LAZY resolves
+- Can be string, object, TargetState, or function
+- Function can return Promise for async redirects
+
+**Example - String redirect**:
+```typescript
+{
+  name: 'A',
+  redirectTo: 'A.B'
+}
+```
+
+**Example - Object redirect**:
+```typescript
+{
+  name: 'C',
+  redirectTo: { 
+    state: 'C.D', 
+    params: { foo: 'index' } 
+  }
+}
+```
+
+**Example - Function redirect**:
+```typescript
+{
+  name: 'E',
+  redirectTo: () => 'A'
+}
+```
+
+**Example - Conditional redirect**:
+```typescript
+{
+  name: 'F',
+  redirectTo: (trans) => {
+    if (trans.params().foo < 10) {
+      return { state: 'F', params: { foo: 10 } };
+    }
+  }
+}
+```
+
+**Example - Async redirect**:
+```typescript
+{
+  name: 'G',
+  redirectTo: (trans) => {
+    const svc = trans.injector().get('AsyncService');
+    return svc.getRedirectTarget(trans.params().foo);
+  }
+}
+```
+
+**Example - With resolve data**:
+```typescript
+{
+  name: 'H',
+  redirectTo: (trans) => {
+    return trans.injector().getAsync('someResolve')
+      .then(data => data === 'login' ? 'login' : null);
+  }
+}
+```
+
+## Lazy Loading
+
+### lazyLoad
+
+Function to lazy load code.
+
+```typescript
+lazyLoad?: (
+  transition: Transition, 
+  state: StateDeclaration
+) => Promise<LazyLoadResult>
+```
+
+**Behavior**:
+- Invoked before state activation
+- Transition waits for loading to complete
+- Should return Promise that resolves when code is loaded
+- Can return LazyLoadResult with states to register
+
+**LazyLoadResult interface**:
+```typescript
+interface LazyLoadResult {
+  states?: StateDeclaration[];
+}
+```
+
+**Example - Load service code**:
+```typescript
+{
+  name: 'abc',
+  lazyLoad: (transition, state) => import('./abcService')
+}
+```
+
+**Example - Future state (load module)**:
+```typescript
+// Future state placeholder
+{
+  name: 'admin.**',
+  url: '/admin',
+  lazyLoad: () => import('./admin.states')
+}
+
+// admin.states.js exports:
+export default {
+  states: [
+    {
+      name: 'admin',
+      url: '/admin/:adminId',
+      component: AdminComponent
+    },
+    {
+      name: 'admin.users',
+      url: '/users',
+      component: UsersComponent
+    }
+  ]
+};
+```
+
+**Example - With dependency loading**:
+```typescript
+{
+  name: 'reports.**',
+  url: '/reports',
+  lazyLoad: async (trans, state) => {
+    // Load multiple dependencies
+    const [states, service] = await Promise.all([
+      import('./reports.states'),
+      import('./reports.service')
+    ]);
+    
+    return { states: states.default };
+  }
+}
+```
+
+## Internal API
+
+### $$state
+
+Gets the internal StateObject API.
+
+```typescript
+$$state?: () => StateObject
+```
+
+<Warning>
+This is an internal API subject to change without notice. Do not use in application code.
+</Warning>
+
+## TypeScript Types
+
+### Complete Example
+
+```typescript
+const userDetailState: StateDeclaration = {
+  // Core properties
+  name: 'users.detail',
+  url: '/:userId',
+  parent: 'users',
+  abstract: false,
+  
+  // Parameters
+  params: {
+    userId: { type: 'int' },
+    tab: { value: 'profile', squash: true }
+  },
+  
+  // Data and resolves
+  data: {
+    requiresAuth: true,
+    pageTitle: 'User Detail'
+  },
+  
+  resolve: [
+    {
+      token: 'user',
+      deps: ['UserService', Transition],
+      resolveFn: (userService, trans) => 
+        userService.get(trans.params().userId)
+    }
+  ],
+  
+  resolvePolicy: {
+    when: 'LAZY',
+    async: 'WAIT'
+  },
+  
+  // Views
+  views: {
+    header: { component: UserHeaderComponent },
+    body: { component: UserBodyComponent }
+  },
+  
+  // Lifecycle hooks
+  onEnter: (trans, state) => {
+    console.log('Entered user detail');
+  },
+  
+  onExit: (trans, state) => {
+    console.log('Exited user detail');
+  }
+};
+```
+
+## Framework-Specific Extensions
+
+Different UI-Router implementations extend this interface:
+
+**Angular (@uirouter/angular)**:
+- `component` - Component class
+- `template` / `templateUrl` - Template configuration
+- `controller` / `controllerAs` - Controller configuration
+
+**React (@uirouter/react)**:
+- `component` - React component class or function
+
+**AngularJS (@uirouter/angularjs)**:
+- `template` / `templateUrl` - Template strings
+- `controller` / `controllerAs` - Controller configuration
+- `templateProvider` - Dynamic templates
+
+## See Also
+
+- [StateRegistry](/api/state-registry) - State registration and management
+- [StateService](/api/state-service) - State navigation and checking
+- [StateObject](/api/state-object) - Internal state representation
+- [ParamDeclaration](/api/param-declaration) - Parameter configuration

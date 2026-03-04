@@ -1,0 +1,249 @@
+---
+title: Introduction
+description: Learn about UI-Router Core, a framework-agnostic state-based routing library for JavaScript Single Page Applications
+---
+
+## What is UI-Router Core?
+
+UI-Router Core is a powerful, framework-agnostic routing library for JavaScript Single Page Applications (SPAs). It provides a state-based approach to routing that goes beyond simple URL matching, offering a complete state machine to manage transitions between application states.
+
+<Note>
+UI-Router Core is the foundation for framework-specific implementations including [UI-Router for Angular 1](https://ui-router.github.io/ng1), [UI-Router for Angular 2+](https://ui-router.github.io/ng2), and [UI-Router for React](https://ui-router.github.io/react).
+</Note>
+
+## Why UI-Router Core?
+
+Unlike traditional routers that simply map URLs to components, UI-Router models your application as a hierarchical tree of states. Each state represents a place in your application with its own URL, data requirements, and UI components.
+
+### Key Benefits
+
+<CardGroup cols={2}>
+  <Card title="State-based routing" icon="sitemap">
+    Model your application as a tree of named states rather than just URL patterns
+  </Card>
+  
+  <Card title="Framework agnostic" icon="puzzle-piece">
+    Use the same routing core across Angular, React, Vue, or vanilla JavaScript
+  </Card>
+  
+  <Card title="Powerful transitions" icon="arrow-right-arrow-left">
+    Transaction-like state transitions with lifecycle hooks and async support
+  </Card>
+  
+  <Card title="Flexible URLs" icon="link">
+    Support for path, query, and hash parameters with custom encoding/decoding
+  </Card>
+</CardGroup>
+
+## Core Features
+
+### Hierarchical State Machine
+
+UI-Router uses a state machine to manage transitions between application states. States can be nested, allowing you to build complex application structures with inherited properties.
+
+```typescript
+router.stateRegistry.register({
+  name: 'app',
+  abstract: true,
+  component: AppLayout
+});
+
+router.stateRegistry.register({
+  name: 'app.dashboard',
+  url: '/dashboard',
+  component: DashboardComponent
+});
+```
+
+### Named State Addressing
+
+Navigate using state names rather than URLs, with support for both absolute and relative addressing:
+
+- **Absolute**: `admin.users`
+- **Relative**: `.users` (from current state)
+
+### Multiple Named Views
+
+Define multiple UI regions that can be independently controlled:
+
+```typescript
+router.stateRegistry.register({
+  name: 'home',
+  url: '/',
+  views: {
+    header: { component: HeaderComponent },
+    content: { component: HomeComponent },
+    sidebar: { component: SidebarComponent }
+  }
+});
+```
+
+### Typed Parameters
+
+UI-Router supports typed URL parameters with built-in types and the ability to define custom parameter types:
+
+- **Built-in types**: `int`, `string`, `date`, `json`, `bool`, `path`, `query`, `hash`
+- **Optional or required** parameters
+- **Default values** with URL squashing
+- **Custom encoding/decoding**
+
+```typescript
+router.stateRegistry.register({
+  name: 'user',
+  url: '/user/{userId:int}',
+  params: {
+    userId: { type: 'int' },
+    showDetails: { value: false, squash: true }
+  }
+});
+```
+
+### Resolve - Async Data Fetching
+
+Fetch data asynchronously before entering a state, with dependency injection support:
+
+```typescript
+router.stateRegistry.register({
+  name: 'user',
+  url: '/user/:userId',
+  resolve: [
+    {
+      token: 'user',
+      deps: ['UserService', Transition],
+      resolveFn: (userService, trans) => {
+        return userService.getUser(trans.params().userId);
+      }
+    }
+  ]
+});
+```
+
+### Transition Lifecycle Hooks
+
+Attach behavior at any point during a state transition:
+
+```typescript
+// Global hook for all transitions
+router.transitionService.onStart({}, (transition) => {
+  console.log('Transition started from', transition.from().name);
+});
+
+// Hook for specific state criteria
+router.transitionService.onEnter({ entering: 'admin.**' }, (transition, state) => {
+  return checkAuthentication();
+});
+```
+
+Available hook types:
+- `onBefore` - Before the transition starts
+- `onStart` - As the transition starts
+- `onEnter` - When entering a state
+- `onRetain` - When a state is retained (not exited/entered)
+- `onExit` - When exiting a state
+- `onFinish` - After the transition succeeds
+- `onSuccess` - Alias for onFinish
+- `onError` - When transition fails
+
+## Framework Agnostic Design
+
+UI-Router Core is designed to work with any JavaScript framework or none at all. It provides the core routing logic while framework-specific adapters handle the integration:
+
+<CodeGroup>
+```typescript Vanilla JavaScript
+import { UIRouter } from '@uirouter/core';
+import { pushStateLocationPlugin } from '@uirouter/core';
+
+const router = new UIRouter();
+router.plugin(pushStateLocationPlugin);
+```
+
+```typescript Angular
+import { UIRouter } from '@uirouter/angular';
+// Angular module automatically provides router instance
+```
+
+```typescript React
+import { UIRouterReact } from '@uirouter/react';
+const router = new UIRouterReact();
+```
+</CodeGroup>
+
+## Architecture Overview
+
+The UIRouter class provides access to all core services:
+
+```typescript
+const router = new UIRouter();
+
+// State management
+router.stateRegistry  // Register and manage states
+router.stateService   // Navigate between states
+
+// URL management  
+router.urlService     // URL routing and synchronization
+
+// Transition management
+router.transitionService  // Transition lifecycle hooks
+
+// Global state
+router.globals        // Current state and params
+
+// View management
+router.viewService    // UI-View synchronization
+```
+
+## Use Cases
+
+UI-Router Core excels at:
+
+<AccordionGroup>
+  <Accordion title="Complex Single Page Applications">
+    Build applications with deeply nested routes, multiple views, and complex navigation patterns. The hierarchical state structure naturally maps to complex UI layouts.
+  </Accordion>
+  
+  <Accordion title="Framework Migration">
+    Since UI-Router Core is framework-agnostic, you can maintain consistent routing logic when migrating between frameworks or supporting multiple frameworks.
+  </Accordion>
+  
+  <Accordion title="Custom Router Implementation">
+    Use UI-Router Core as the foundation for building custom routers for new frameworks or specialized use cases. Implement UIView, UISref, and framework-specific bootstrapping.
+  </Accordion>
+  
+  <Accordion title="Data-Driven Applications">
+    Leverage resolve dependencies to fetch data before rendering views, ensuring your components always have the data they need.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+Ready to get started? Follow our installation and quickstart guides:
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install UI-Router Core in your project
+  </Card>
+  
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first router in minutes
+  </Card>
+  
+  <Card title="Core Concepts" icon="book" href="/concepts/overview">
+    Learn about states, transitions, and URLs
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/uirouter">
+    Explore the complete API documentation
+  </Card>
+</CardGroup>
+
+## Community and Support
+
+<CardGroup cols={2}>
+  <Card title="GitHub" icon="github" href="https://github.com/ui-router/core">
+    Report issues and contribute to the project
+  </Card>
+  
+  <Card title="Stack Overflow" icon="stack-overflow" href="https://stackoverflow.com/questions/tagged/uirouter">
+    Get help from the community
+  </Card>
+</CardGroup>
